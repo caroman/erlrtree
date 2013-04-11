@@ -1,0 +1,12 @@
+{application, rtree,
+ [
+  {description, ""},
+  {vsn, "3.0"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { rtree_app, []}},
+  {env, []}
+ ]}.
