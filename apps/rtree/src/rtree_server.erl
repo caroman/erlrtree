@@ -1,18 +1,18 @@
 -module(rtree_server).
 -behaviour(gen_server).
 
-%%%%%
-%% Interface
-%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Server Interface
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -export([
     start_link/0,
     stop/0,
     intersects/2
     ]).
 
-%%%%%
-%% Gen Server part
-%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Server call back functions
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -export([
     init/1,
     handle_call/3,
@@ -22,61 +22,73 @@
     code_change/3
     ]).
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Server initial state
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -record(state, {request_count = 0}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% EXPORTED FUNCTIONS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%
 
-%%%%%
-%% @spec start_link() -> {atom(ok), pid()}  | {atom(error), Reason::term()}
-%
+%%% ----------------------------------------------------------------------------
+%%% @doc Server start_link interface
+%%% @spec start_link() -> {atom(ok), pid()}  | {atom(error), Reason::term()}
+%%% @end
+%%% ----------------------------------------------------------------------------
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, no_args, []).
 
-%%%%%
-%% @spec stop() -> atom(ok)
-%
+%%% ----------------------------------------------------------------------------
+%%% @doc Server stop interface
+%%% @spec stop() -> atom(ok)
+%%% @end
+%%% ----------------------------------------------------------------------------
 stop() ->
     gen_server:cast(?MODULE, stop).
 
-%%%%%
-%% @spec intersects(string(), string()) -> 
-%   {atom(ok), bool()} | {atom(error), Reason::term()}
-%
-intersects(Latitude, Longitude) ->
-    gen_server:call(?MODULE, {intersects, Latitude, Longitude}).
+%%% ----------------------------------------------------------------------------
+%%% @doc Server intersects interface
+%%% @spec intersects(float(), float()) -> 
+%%%   {atom(ok), bool()} | {atom(error), Reason::term()}
+%%% @end
+%%% ----------------------------------------------------------------------------
+intersects(X, Y) ->
+    gen_server:call(?MODULE, {intersects, X, Y}).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%
-% EXPORTED FUNCTIONS/GE_SERVER CALLBACKS
+%%% EXPORTED FUNCTIONS/GE_SERVER CALLBACKS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%
 
-%%%%%
-%% @spec init(atom(no_args)) -> {ok, state()}
-%
+%%% ----------------------------------------------------------------------------
+%%% @doc Handle start/start_link server callback function
+%%% @spec init(atom(no_args)) -> {ok, state()}
+%%% @end
+%%% ----------------------------------------------------------------------------
 init(no_args) ->
     process_flag(trap_exit, true),
-    {ok, #state{request_count = 1}}.
+    {ok, #state{request_count = 0}}.
 
-%%%%%
-%% @spec handle_call(Call::term(), From::{pid(), reference()}, state()) ->
-%%  {atom(reply), Reply, state()}
-%
-handle_call({intersects, Latitude, Longitude}, _, State) ->
-    case rtree:intersects(Latitude, Longitude) of
+%%% ----------------------------------------------------------------------------
+%%% @doc Handle call server callback function
+%%% @spec handle_call(Call::term(), From::{pid(), reference()}, state()) ->
+%%%  {atom(reply), Reply, state()}
+%%% @end
+%%% ----------------------------------------------------------------------------
+handle_call({intersects, X, Y}, _, State) ->
+    case rtree:intersects(X, Y) of
         {ok, Bool} -> {reply, {ok, Bool}, State};
         {error, Reason} -> {reply, {error, Reason}, State}
     end.
 
 
-%%%%%
-%% @spec handle_cast(Cast::term(), state()) ->
-%%  {atom(stop), Reason::string(), state()}
-%
+%%% ----------------------------------------------------------------------------
+%%% @doc Handle cast server callback function
+%%% @spec handle_cast(Cast::term(), state()) ->
+%%%  {atom(stop), Reason::string(), state()}
+%%% @end
+%%% ----------------------------------------------------------------------------
 handle_cast(stop, State) ->
     io:format("Cast: ~p~n", [State]),
     {stop, normal, State};
@@ -84,33 +96,37 @@ handle_cast(Cast, State) ->
     io:format("Cast: ~p~n", [State]),
     {stop, {"Can't not handle cast", Cast}, State}.
 
-%%%%%
-%% @spec handle_info(term(), state()) ->
-%%  {atom(stop), Reason::string(), state()}
-%
+%%% ----------------------------------------------------------------------------
+%%% @doc Handle info server callback function
+%%% @spec handle_info(term(), state()) ->
+%%% {atom(stop), Reason::string(), state()}
+%%% @end
+%%% ----------------------------------------------------------------------------
 handle_info(Info, State) ->
     io:format("Info: ~p~n", [State]),
     {stop, {"Can't not handle info", Info}, State}.
 
-%%%%%
-%% @spec code_change(OldVsn::term(), state(), Extra::[term()]) ->
-%%  {atom(ok), state()}
-%
+%%% ----------------------------------------------------------------------------
+%%% @doc Code change server callback function
+%%% @spec code_change(OldVsn::term(), state(), Extra::[term()]) ->
+%%%  {atom(ok), state()}
+%%% @end
+%%% ----------------------------------------------------------------------------
 code_change(_, State, _) -> 
     io:format("Code Change: ~p~n", [State]),
     {ok, State}.
 
-%%%%%
-%% @spec terminate(Reason::term(), State::state()) -> none()
-%
+%%% ----------------------------------------------------------------------------
+%%% @doc Terminate server callback function
+%%% @spec terminate(Reason::term(), State::state()) -> none()
+%%% @end
+%%% ----------------------------------------------------------------------------
 terminate(shutdown, State) -> 
     io:format("Terminate: ~p~n", [State]);
 terminate(_, _) -> ok.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%
-% INTERNAL FUNCTIONS
+%%% INTERNAL FUNCTIONS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%
 
 % rtree module

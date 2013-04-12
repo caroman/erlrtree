@@ -4,12 +4,10 @@
     intersects/2
     ]).
 
-%%%%%
-%% @spec intersects(string(), string()) -> none()
-%
-intersects(Latitude, Longitude) ->
-    Pt = {'Point',[0.0, 1.1]},
-    Pt1 = erlgeom:to_geom(Pt),
-    io:format("Intersects: ~p~n", [{Latitude, Longitude}]),
+%%% @doc Intersects X,Y point with rtree
+%%% @spec intersects(float(), float()) -> [integer()]
+%%%
+intersects(X, Y) ->
+    io:format("Intersects: ~p~n", [{X, Y}]),
     {ok, true}.
 
