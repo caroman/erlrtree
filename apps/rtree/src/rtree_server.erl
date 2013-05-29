@@ -7,7 +7,9 @@
 -export([
     start_link/0,
     stop/0,
+    create/1,
     intersects/2
+    load/2,
     ]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -56,9 +58,18 @@ stop() ->
 intersects(X, Y) ->
     gen_server:call(?MODULE, {intersects, X, Y}).
 
+%%% ----------------------------------------------------------------------------
+%%% @doc Server intersects interface
+%%% @spec intersects(float(), float()) -> 
+%%%   {atom(ok), bool()} | {atom(error), Reason::term()}
+%%% @end
+%%% ----------------------------------------------------------------------------
+load(File, Name) ->
+    gen_server:call(?MODULE, {load, File, Name}).
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%% EXPORTED FUNCTIONS/GE_SERVER CALLBACKS
+%%% EXPORTED FUNCTIONS/GEN_SERVER CALLBACKS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %%% ----------------------------------------------------------------------------
@@ -78,6 +89,11 @@ init(no_args) ->
 %%% ----------------------------------------------------------------------------
 handle_call({intersects, X, Y}, _, State) ->
     case rtree:intersects(X, Y) of
+        {ok, Bool} -> {reply, {ok, Bool}, State};
+        {error, Reason} -> {reply, {error, Reason}, State}
+    end;
+handle_call({load, File, Name}, _, State) ->
+    case rtree:load(File, Name) of
         {ok, Bool} -> {reply, {ok, Bool}, State};
         {error, Reason} -> {reply, {error, Reason}, State}
     end.
