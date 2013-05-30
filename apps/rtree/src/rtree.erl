@@ -3,8 +3,8 @@
 -include("rtree.hrl").
 
 -export([
-    create/1
-    intersects/2,
+    tree/1,
+    intersects/3,
     load/2
     ]).
 
@@ -14,12 +14,12 @@
 %%% @spec load(File, Name) -> atom(ok) || {atom(error), Reason::string()}
 %%% @end
 %%% ----------------------------------------------------------------------------
-create(Table) ->
-    GeosSTRtree = erlgeom:geosstrtree_create(),
+tree(Table) ->
+    Tree = erlgeom:geosstrtree_create(),
     lists:foreach(
-        fun(R) -> erlgeom:geosstrtree_insert(GeosSTRtree, R#feature.geom) end,
+        fun(R) -> erlgeom:geosstrtree_insert(Tree, R#feature.geom) end,
         ets:match_object(Table, '$1')),
-    {ok, GeosSTRtree}.
+    {ok, Tree}.
 
 
 %%% ----------------------------------------------------------------------------
@@ -27,9 +27,12 @@ create(Table) ->
 %%% @spec intersects(float(), float()) -> [integer()]
 %%% @end
 %%% ----------------------------------------------------------------------------
-intersects(X, Y) ->
+intersects(Tree, X, Y) ->
     io:format("Intersects: ~p~n", [{X, Y}]),
-    {ok, true}.
+    Point = {'Point', [X, Y]},
+    Geom = erlgeom:to_geom(Point),
+    Geoms = erlgeom:geosstrtree_query(Tree, Geom),
+    {ok, Geoms}.
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Load File into an ETS named Name to be used by rtree as a container for
@@ -42,12 +45,12 @@ load(File, Name) ->
     Table = list_to_atom(Name),
     WkbReader = erlgeom:wkbreader_create(),
     case erlogr:open(File) of
-        DataSource ->
+        {ok, DataSource} ->
             Layer = erlogr:ds_get_layer(DataSource, 0),
             Count = erlogr:l_get_feature_count(Layer),
             %% {ok, Feature} = erlogr:l_get_next_feature(Layer)
             Features = [element(2, erlogr:l_get_next_feature(Layer)) || 
-                X <- lists:seq(1, Count)],
+                _ <- lists:seq(1, Count)],
             ets:new(Table,
                 [set,
                  named_table,
@@ -59,7 +62,7 @@ load(File, Name) ->
         {error, Reason} ->
             {error, Reason}
     end,
-    {ok, Table, Count}.
+    {ok, Table}.
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Helper to convert Feature from Layer into a Record for the ETS

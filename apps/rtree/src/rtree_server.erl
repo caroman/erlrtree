@@ -7,9 +7,9 @@
 -export([
     start_link/0,
     stop/0,
-    create/1,
-    intersects/2
-    load/2,
+    tree/0,
+    intersects/2,
+    load/2
     ]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -27,7 +27,11 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% Server initial state
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
--record(state, {request_count = 0}).
+-record(state, {
+    tree=undefined,
+    table=undefined,
+    ok_count=0,
+    error_count=0}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% EXPORTED FUNCTIONS
@@ -48,6 +52,15 @@ start_link() ->
 %%% ----------------------------------------------------------------------------
 stop() ->
     gen_server:cast(?MODULE, stop).
+
+%%% ----------------------------------------------------------------------------
+%%% @doc Server intersects interface
+%%% @spec Tree(atom(Table)) -> 
+%%%   {atom(ok), Tree} | {atom(error), Reason::term()}
+%%% @end
+%%% ----------------------------------------------------------------------------
+tree() ->
+    gen_server:call(?MODULE, {tree}).
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Server intersects interface
@@ -79,7 +92,7 @@ load(File, Name) ->
 %%% ----------------------------------------------------------------------------
 init(no_args) ->
     process_flag(trap_exit, true),
-    {ok, #state{request_count = 0}}.
+    {ok, #state{ok_count=0, error_count=0}}.
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Handle call server callback function
@@ -87,14 +100,21 @@ init(no_args) ->
 %%%  {atom(reply), Reply, state()}
 %%% @end
 %%% ----------------------------------------------------------------------------
-handle_call({intersects, X, Y}, _, State) ->
-    case rtree:intersects(X, Y) of
-        {ok, Bool} -> {reply, {ok, Bool}, State};
+handle_call({tree}, _, State) ->
+    case rtree:tree(State#state.table) of
+        {ok, Tree} -> {reply, {ok, Tree}, State#state{tree=Tree}};
         {error, Reason} -> {reply, {error, Reason}, State}
+    end;
+handle_call({intersects, X, Y}, _, State) ->
+    case rtree:intersects(State#state.tree, X, Y) of
+        {ok, Geoms} -> {reply, {ok, Geoms},
+            State#state{ok_count=State#state.ok_count + 1}};
+        {error, Reason} -> {reply, {error, Reason},
+            State#state{error_count=State#state.error_count + 1}}
     end;
 handle_call({load, File, Name}, _, State) ->
     case rtree:load(File, Name) of
-        {ok, Bool} -> {reply, {ok, Bool}, State};
+        {ok, Table} -> {reply, {ok, Table}, State#state{table=Table}};
         {error, Reason} -> {reply, {error, Reason}, State}
     end.
 
