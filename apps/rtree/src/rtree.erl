@@ -10,14 +10,13 @@
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Create STRtree from ETS
-%%% the geometry objects
-%%% @spec load(File, Name) -> atom(ok) || {atom(error), Reason::string()}
+%%% @spec tree(File, Name) -> atom(ok) || {atom(error), Reason::string()}
 %%% @end
 %%% ----------------------------------------------------------------------------
 tree(Table) ->
     Tree = erlgeom:geosstrtree_create(),
     lists:foreach(
-        fun(R) -> erlgeom:geosstrtree_insert(Tree, R#feature.geom) end,
+        fun(R) -> erlgeom:geosstrtree_insert(Tree, element(4,R)) end,
         ets:match_object(Table, '$1')),
     {ok, Tree}.
 
@@ -47,18 +46,20 @@ load(File, Name) ->
     case erlogr:open(File) of
         {ok, DataSource} ->
             Layer = erlogr:ds_get_layer(DataSource, 0),
+            FeatDefn = erlogr:l_get_layer_defn(Layer),
+            Header = lists:map(fun(Field) -> list_to_atom(Field) end,
+                tuple_to_list(erlogr:fd_get_fields_name(FeatDefn))),
             Count = erlogr:l_get_feature_count(Layer),
-            %% {ok, Feature} = erlogr:l_get_next_feature(Layer)
-            Features = [element(2, erlogr:l_get_next_feature(Layer)) || 
-                _ <- lists:seq(1, Count)],
-            ets:new(Table,
-                [set,
-                 named_table,
-                 {keypos, #feature.id},
-                 {read_concurrency, true}]),
-            lists:foreach(
-                fun(F) -> ets:insert(Table, feature_to_record(WkbReader, F)) end,
-                Features);
+            Records = [feature_to_tuple(WkbReader,
+                element(2, erlogr:l_get_next_feature(Layer)), %% {ok, Feature}
+                Header) || _ <- lists:seq(1, Count)],
+            case ets:info(Table) of
+                undefined -> ets:new(Table, [set, named_table,
+                     {keypos, 5}, %% first 4 values are header,srid,wkb,geom
+                     {read_concurrency, true}]);
+                _ -> ok
+            end,
+            lists:foreach(fun(R) -> ets:insert(Table, R) end, Records);
         {error, Reason} ->
             {error, Reason}
     end,
@@ -66,17 +67,16 @@ load(File, Name) ->
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Helper to convert Feature from Layer into a Record for the ETS
-%%% @spec feature_to_record(Feature) -> record(feature)
+%%% @spec feature_to_record(WkbReader, Feature Header) -> record(feature)
 %%% @end
 %%% ----------------------------------------------------------------------------
-feature_to_record(WkbReader, Feature) ->
-    Fields = erlogr:f_get_fields(Feature),
+feature_to_tuple(WkbReader, Feature, Header) ->
     Geom = erlogr:f_get_geometry_ref(Feature),
     Wkb = erlogr:g_export_to_wkb(Geom),
     GeosGeom = erlgeom:wkbreader_read(WkbReader, Wkb),
-    #feature{
-        id=element(1,Fields),
-        fields=Fields,
-        feature=Feature,
-        geom=GeosGeom}.
-
+    FieldsA = [Header,
+        -1, % srid
+        Wkb,
+        GeosGeom],
+    FieldsB = tuple_to_list(erlogr:f_get_fields(Feature)),
+    list_to_tuple(lists:append(FieldsA, FieldsB)).

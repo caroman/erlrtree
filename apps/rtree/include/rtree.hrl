@@ -1,7 +1,8 @@
 -record(feature,
     {id,
      fields,
-     feature,
+     srid,
+     wkb,
      geom}).
 
 

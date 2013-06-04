@@ -9,7 +9,8 @@
     stop/0,
     tree/0,
     intersects/2,
-    load/2
+    load/2,
+    status/0
     ]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -80,6 +81,14 @@ intersects(X, Y) ->
 load(File, Name) ->
     gen_server:call(?MODULE, {load, File, Name}).
 
+%%% ----------------------------------------------------------------------------
+%%% @doc Server intersects interface
+%%% @spec status() -> {atom(ok), record(state)}
+%%% @end
+%%% ----------------------------------------------------------------------------
+status() ->
+    gen_server:call(?MODULE, {status}).
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% EXPORTED FUNCTIONS/GEN_SERVER CALLBACKS
@@ -116,7 +125,9 @@ handle_call({load, File, Name}, _, State) ->
     case rtree:load(File, Name) of
         {ok, Table} -> {reply, {ok, Table}, State#state{table=Table}};
         {error, Reason} -> {reply, {error, Reason}, State}
-    end.
+    end;
+handle_call({status}, _, State) ->
+    {reply, {ok, State}, State}.
 
 
 %%% ----------------------------------------------------------------------------
