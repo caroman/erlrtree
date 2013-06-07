@@ -16,7 +16,7 @@
 tree(Table) ->
     Tree = erlgeom:geosstrtree_create(),
     lists:foreach(
-        fun(R) -> erlgeom:geosstrtree_insert(Tree, element(4,R)) end,
+        fun(R) -> erlgeom:geosstrtree_insert(Tree, element(3, R), R) end,
         ets:match_object(Table, '$1')),
     {ok, Tree}.
 
@@ -76,7 +76,7 @@ feature_to_tuple(WkbReader, Feature, Header) ->
     GeosGeom = erlgeom:wkbreader_read(WkbReader, Wkb),
     FieldsA = [Header,
         -1, % srid
-        Wkb,
-        GeosGeom],
+        GeosGeom,
+        Wkb],
     FieldsB = tuple_to_list(erlogr:f_get_fields(Feature)),
     list_to_tuple(lists:append(FieldsA, FieldsB)).
