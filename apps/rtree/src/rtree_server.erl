@@ -9,7 +9,7 @@
     stop/0,
     tree/0,
     intersects/2,
-    load/2,
+    load/1,
     status/0
     ]).
 
@@ -78,8 +78,8 @@ intersects(X, Y) ->
 %%%   {atom(ok), bool()} | {atom(error), Reason::term()}
 %%% @end
 %%% ----------------------------------------------------------------------------
-load(File, Name) ->
-    gen_server:call(?MODULE, {load, File, Name}).
+load(Dsn) ->
+    gen_server:call(?MODULE, {load, Dsn, ?MODULE}).
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Server intersects interface
@@ -111,7 +111,7 @@ init(no_args) ->
 %%% ----------------------------------------------------------------------------
 handle_call({tree}, _, State) ->
     case rtree:tree(State#state.table) of
-        {ok, Tree} -> {reply, {ok, Tree}, State#state{tree=Tree}};
+        {ok, Tree} -> {reply, ok, State#state{tree=Tree}};
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
 handle_call({intersects, X, Y}, _, State) ->
@@ -121,8 +121,8 @@ handle_call({intersects, X, Y}, _, State) ->
         {error, Reason} -> {reply, {error, Reason},
             State#state{error_count=State#state.error_count + 1}}
     end;
-handle_call({load, File, Name}, _, State) ->
-    case rtree:load(File, Name) of
+handle_call({load, Dsn, TableName}, _, State) ->
+    case rtree:load(Dsn, TableName) of
         {ok, Table} -> {reply, {ok, Table}, State#state{table=Table}};
         {error, Reason} -> {reply, {error, Reason}, State}
     end;

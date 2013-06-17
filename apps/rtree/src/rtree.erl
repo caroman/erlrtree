@@ -9,7 +9,7 @@
     ]).
 
 %%% ----------------------------------------------------------------------------
-%%% @doc Create STRtree from ETS
+%%% @doc Create STRtree from rtree ETS
 %%% @spec tree(File, Name) -> atom(ok) || {atom(error), Reason::string()}
 %%% @end
 %%% ----------------------------------------------------------------------------
@@ -17,6 +17,7 @@ tree(Table) ->
     Tree = erlgeom:geosstrtree_create(),
     lists:foreach(
         fun(R) -> erlgeom:geosstrtree_insert(Tree, element(3, R), R) end,
+        %fun(R) -> erlgeom:geosstrtree_insert(Tree, element(3, R), element(3,R)) end,
         ets:match_object(Table, '$1')),
     {ok, Tree}.
 
@@ -34,28 +35,26 @@ intersects(Tree, X, Y) ->
     {ok, Geoms}.
 
 %%% ----------------------------------------------------------------------------
-%%% @doc Load File into an ETS named Name to be used by rtree as a container for
-%%% the geometry objects
-%%% @spec load(File, Name) -> atom(ok) || {atom(error), Reason::string()}
+%%% @doc Load File into an rtree ETS named Name to be used by rtree as a 
+%%% container for the geometry objects
+%%% @spec load(Dsn, Table) -> atom(ok) || {atom(error), atom()}
 %%% @end
 %%% ----------------------------------------------------------------------------
-load(File, Name) ->
-    io:format("File to load: ~p~n", [File]),
-    Table = list_to_atom(Name),
+load(Dsn, Table) ->
     WkbReader = erlgeom:wkbreader_create(),
-    case erlogr:open(File) of
+    case erlogr:open(Dsn) of
         {ok, DataSource} ->
-            Layer = erlogr:ds_get_layer(DataSource, 0),
-            FeatDefn = erlogr:l_get_layer_defn(Layer),
+            {ok, Layer} = erlogr:ds_get_layer(DataSource, 0),
+            {ok, FeatDefn} = erlogr:l_get_layer_defn(Layer),
             Header = lists:map(fun(Field) -> list_to_atom(Field) end,
-                tuple_to_list(erlogr:fd_get_fields_name(FeatDefn))),
-            Count = erlogr:l_get_feature_count(Layer),
+                tuple_to_list(element(2, erlogr:fd_get_fields_name(FeatDefn)))),
+            {ok, Count} = erlogr:l_get_feature_count(Layer),
             Records = [feature_to_tuple(WkbReader,
                 element(2, erlogr:l_get_next_feature(Layer)), %% {ok, Feature}
                 Header) || _ <- lists:seq(1, Count)],
             case ets:info(Table) of
                 undefined -> ets:new(Table, [set, named_table,
-                     {keypos, 5}, %% first 4 values are header,srid,wkb,geom
+                     {keypos, 5}, %% first 4 values are header,srid,geos,wkb
                      {read_concurrency, true}]);
                 _ -> ok
             end,
@@ -71,12 +70,12 @@ load(File, Name) ->
 %%% @end
 %%% ----------------------------------------------------------------------------
 feature_to_tuple(WkbReader, Feature, Header) ->
-    Geom = erlogr:f_get_geometry_ref(Feature),
-    Wkb = erlogr:g_export_to_wkb(Geom),
+    {ok, Geom} = erlogr:f_get_geometry_ref(Feature),
+    {ok, Wkb} = erlogr:g_export_to_wkb(Geom),
     GeosGeom = erlgeom:wkbreader_read(WkbReader, Wkb),
     FieldsA = [Header,
         -1, % srid
         GeosGeom,
         Wkb],
-    FieldsB = tuple_to_list(erlogr:f_get_fields(Feature)),
+    FieldsB = tuple_to_list(element(2, erlogr:f_get_fields(Feature))),
     list_to_tuple(lists:append(FieldsA, FieldsB)).
