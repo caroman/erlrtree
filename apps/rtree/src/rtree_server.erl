@@ -79,7 +79,11 @@ intersects(X, Y) ->
 %%% @end
 %%% ----------------------------------------------------------------------------
 load(Dsn) ->
+<<<<<<< HEAD
     gen_server:call(?MODULE, {load, Dsn}).
+=======
+    gen_server:call(?MODULE, {load, Dsn, ?MODULE}).
+>>>>>>> ee932040bd3f803caf25e5f3e00bc7320b71e2dd
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Server intersects interface

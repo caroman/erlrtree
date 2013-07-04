@@ -83,4 +83,3 @@ intersects(Tree, X, Y) ->
     Point = erlgeom:to_geom({'Point', [X, Y]}),
     Elements = erlgeom:geosstrtree_query(Tree, Point),
     [E || E <- Elements, erlgeom:intersects(element(3, E), Point)].
-
