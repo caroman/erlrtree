@@ -54,11 +54,19 @@ load_to_ets(Dsn, Table) ->
 %%% @end
 %%% ----------------------------------------------------------------------------
 tree_from_ets(Table) ->
-    Tree = erlgeom:geosstrtree_create(),
-    lists:foreach(
-        fun(R) -> erlgeom:geosstrtree_insert(Tree, element(3, R), R) end,
-        ets:match_object(Table, '$1')),
-    {ok, Tree}.
+    case ets:info(Table, size) of
+        Size when Size > 0  ->
+            Tree = erlgeom:geosstrtree_create(),
+            lists:foreach(
+                fun(R) -> erlgeom:geosstrtree_insert(Tree, element(3, R), R)
+                end,
+                ets:match_object(Table, '$1')),
+            {ok, Tree};
+        Size when Size == 0 ->
+            {error, "Empty table"};
+        _ ->
+            {error, "Bad arg"}
+    end.
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Helper to convert Feature from Layer into a Record for the ETS
@@ -68,8 +76,8 @@ tree_from_ets(Table) ->
 feature_to_tuple(WkbReader, Header, Feature) ->
     {ok, Geom} = erlogr:f_get_geometry_ref(Feature),
     {ok, Wkb} = erlogr:g_export_to_wkb(Geom),
-    Geom = erlgeom:wkbreader_read(WkbReader, Wkb),
-    FieldsA = [Header, -1, Geom, Wkb], % header, srid, geom, wkb
+    GeosGeom = erlgeom:wkbreader_read(WkbReader, Wkb),
+    FieldsA = [Header, -1, GeosGeom, Wkb], % header, srid, geom, wkb
     {ok, Fields} = erlogr:f_get_fields(Feature),
     FieldsB = tuple_to_list(Fields),
     list_to_tuple(lists:append(FieldsA, FieldsB)).
@@ -80,6 +88,15 @@ feature_to_tuple(WkbReader, Header, Feature) ->
 %%% @end
 %%% ----------------------------------------------------------------------------
 intersects(Tree, X, Y) ->
+    io:format("intersects~n"),
     Point = erlgeom:to_geom({'Point', [X, Y]}),
+    io:format("before query~n"),
     Elements = erlgeom:geosstrtree_query(Tree, Point),
-    [E || E <- Elements, erlgeom:intersects(element(3, E), Point)].
+    io:format("before intersects~n"),
+    InElements = [E || E <- Elements,
+        erlgeom:intersects(element(3, E), Point) == true],
+    {ok, InElements}.
+
+
+
+

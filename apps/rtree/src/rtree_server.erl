@@ -55,7 +55,7 @@ stop() ->
     gen_server:cast(?MODULE, stop).
 
 %%% ----------------------------------------------------------------------------
-%%% @doc Server intersects interface
+%%% @doc Server tree interface
 %%% @spec Tree(atom(Table)) -> 
 %%%   {atom(ok), Tree} | {atom(error), Reason::term()}
 %%% @end
@@ -73,8 +73,8 @@ intersects(X, Y) ->
     gen_server:call(?MODULE, {intersects, X, Y}).
 
 %%% ----------------------------------------------------------------------------
-%%% @doc Server intersects interface
-%%% @spec intersects(float(), float()) -> 
+%%% @doc Server load interface
+%%% @spec load(Dsn::term()) -> 
 %%%   {atom(ok), bool()} | {atom(error), Reason::term()}
 %%% @end
 %%% ----------------------------------------------------------------------------
@@ -82,7 +82,7 @@ load(Dsn) ->
     gen_server:call(?MODULE, {load, Dsn}).
 
 %%% ----------------------------------------------------------------------------
-%%% @doc Server intersects interface
+%%% @doc Server status interface
 %%% @spec status() -> {atom(ok), record(state)}
 %%% @end
 %%% ----------------------------------------------------------------------------
@@ -102,8 +102,8 @@ status() ->
 init(no_args) ->
     process_flag(trap_exit, true),
     {ok, Table} = rtree:create_ets(?MODULE),
-    {ok, Tree} = rtree:tree_from_ets(Table),
-    {ok, #state{tree=Tree, table=Table, ok_count=0, error_count=0}}.
+    %% {ok, Tree} = rtree:tree_from_ets(Table),
+    {ok, #state{tree=undefined, table=Table, ok_count=0, error_count=0}}.
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Handle call server callback function
@@ -117,14 +117,20 @@ handle_call({tree}, _, State) ->
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
 handle_call({intersects, X, Y}, _, State) ->
-    case rtree:intersects(State#state.tree, X, Y) of
-        {ok, Geoms} -> {reply, {ok, Geoms},
-            State#state{ok_count=State#state.ok_count + 1}};
-        {error, Reason} -> {reply, {error, Reason},
-            State#state{error_count=State#state.error_count + 1}}
+    if 
+        State#state.tree == undefined ->
+            {reply, {error, "Tree not populated yet"}, State};
+
+        true ->
+            case rtree:intersects(State#state.tree, X, Y) of
+                {ok, Geoms} -> {reply, {ok, Geoms},
+                    State#state{ok_count=State#state.ok_count + 1}};
+                {error, Reason} -> {reply, {error, Reason},
+                    State#state{error_count=State#state.error_count + 1}}
+            end
     end;
-handle_call({load, Dsn, TableName}, _, State) ->
-    case rtree:load_from_ets(Dsn, TableName) of
+handle_call({load, Dsn}, _, State) ->
+    case rtree:load_to_ets(Dsn, State#state.table) of
         {ok, Table} -> {reply, {ok, Table}, State#state{table=Table}};
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
