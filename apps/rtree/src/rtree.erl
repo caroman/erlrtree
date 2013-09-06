@@ -88,11 +88,8 @@ feature_to_tuple(WkbReader, Header, Feature) ->
 %%% @end
 %%% ----------------------------------------------------------------------------
 intersects(Tree, X, Y) ->
-    io:format("intersects~n"),
     Point = erlgeom:to_geom({'Point', [X, Y]}),
-    io:format("before query~n"),
     Elements = erlgeom:geosstrtree_query(Tree, Point),
-    io:format("before intersects~n"),
     InElements = [E || E <- Elements,
         erlgeom:intersects(element(3, E), Point) == true],
     {ok, InElements}.
