@@ -114,7 +114,8 @@ def main(argv):
             msg = node_helper.send_sync_rpc(args.remote_node,
                 module_name,
                 function_name,
-                erlang_args)
+                erlang_args,
+                args.timeout)
         except node.Timeout as error:
             LOGGER.error(error)
             return 1

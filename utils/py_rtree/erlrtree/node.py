@@ -128,7 +128,7 @@ class NodeHelper():
     def _sync_rpc_callback(self, msg):
         self._sync_rpc_queue.put(msg)
 
-    def send_sync_rpc(self, remote_node, module, function, args):
+    def send_sync_rpc(self, remote_node, module, function, args, timeout=None):
         # Cleaning queue in case callback called right after timeout
         if self._sync_rpc_queue.full():
             LOGGER.debug("Cleaning sync rpc queue")
@@ -142,9 +142,12 @@ class NodeHelper():
                 function,
                 args,
                 self._sync_rpc_callback))
-        
+
+        if timeout is None:
+            timeout = self._timeout     
+ 
         try:
-            msg = self._sync_rpc_queue.get(True, self._timeout)
+            msg = self._sync_rpc_queue.get(True, timeout)
         except Queue.Empty as error:
             self._event_handler.DelTimerEvent(timer_id)
             raise Timeout("No response for sync rpc.")
