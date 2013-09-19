@@ -1,21 +1,30 @@
+%%------------------------------------------------------------------------------
+%% @author Carlos Roman <caroman@gmail.com>
+%% @doc
+%%   Gen Server behaviour implementation for rtree server.
+%% @copyright 2013 Carlos Roman
+%% @end
+%%------------------------------------------------------------------------------
 -module(rtree_server).
 -behaviour(gen_server).
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%% Server Interface
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% =============================================================================
+%%  Server Interface
+%% =============================================================================
 -export([
-    start_link/0,
-    stop/0,
-    tree/0,
-    intersects/2,
-    load/1,
-    status/0
+    start_link/2,
+    create/1,
+    create/2,
+    stop/1,
+    tree/1,
+    intersects/3,
+    load/2,
+    status/1
     ]).
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%% Server call back functions
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% =============================================================================
+%% Server call back functions
+%% =============================================================================
 -export([
     init/1,
     handle_call/3,
@@ -25,93 +34,151 @@
     code_change/3
     ]).
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%% Server initial state
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% =============================================================================
+%%  Server initial state
+%% =============================================================================
 -record(state, {
+    name=undefined,
+    capacity=undefined,
     tree=undefined,
     table=undefined,
     ok_count=0,
     error_count=0}).
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%% EXPORTED FUNCTIONS
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-define(SERVER, ?MODULE).
+-define(DEFAULT_CAPACITY, 10). % 10 elements per node
 
-%%% ----------------------------------------------------------------------------
-%%% @doc Server start_link interface
-%%% @spec start_link() -> {atom(ok), pid()}  | {atom(error), Reason::term()}
-%%% @end
-%%% ----------------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, no_args, []).
+%% =============================================================================
+%% EXPORTED FUNCTIONS
+%% =============================================================================
 
-%%% ----------------------------------------------------------------------------
-%%% @doc Server stop interface
-%%% @spec stop() -> atom(ok)
-%%% @end
-%%% ----------------------------------------------------------------------------
-stop() ->
-    gen_server:cast(?MODULE, stop).
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server start_link interface
+%%
+%% @spec start_link(Name, Capacity) -> {ok, Pid} | {error, Error}
+%% where
+%%     Name = string()
+%%     Capacity = integer()
+%% @end
+%%------------------------------------------------------------------------------
+start_link(Name, Capacity) ->
+    gen_server:start_link({global, Name}, ?MODULE, [Name, Capacity], []).
 
-%%% ----------------------------------------------------------------------------
-%%% @doc Server tree interface
-%%% @spec Tree(atom(Table)) -> 
-%%%   {atom(ok), Tree} | {atom(error), Reason::term()}
-%%% @end
-%%% ----------------------------------------------------------------------------
-tree() ->
-    gen_server:call(?MODULE, {tree}).
+%%------------------------------------------------------------------------------
+%% @doc
+%%  Create a rtree element with node capacity Capacity
+%%
+%% @spec create(Name, Capacity) -> void()
+%% where
+%%     Name = string()
+%%     Capacity = integer()
+%% @end
+%%------------------------------------------------------------------------------
+create(Name, Capacity) ->
+    rtree_sup:start_child(Name, Capacity).
 
-%%% ----------------------------------------------------------------------------
-%%% @doc Server intersects interface
-%%% @spec intersects(float(), float()) -> 
-%%%   {atom(ok), bool()} | {atom(error), Reason::term()}
-%%% @end
-%%% ----------------------------------------------------------------------------
-intersects(X, Y) ->
-    gen_server:call(?MODULE, {intersects, X, Y}).
+%% @spec create(Name) -> void()
+%% @equiv create(Name, DefaultCapacity)
+create(Name) ->
+    create(Name, ?DEFAULT_CAPACITY).
 
-%%% ----------------------------------------------------------------------------
-%%% @doc Server load interface
-%%% @spec load(Dsn::term()) -> 
-%%%   {atom(ok), bool()} | {atom(error), Reason::term()}
-%%% @end
-%%% ----------------------------------------------------------------------------
-load(Dsn) ->
-    gen_server:call(?MODULE, {load, Dsn}).
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server stop interface
+%%
+%% @spec stop(Name) -> ok
+%%  where
+%%      Name = term()
+%% @end
+%%------------------------------------------------------------------------------
+stop(Name) ->
+    gen_server:cast({global, Name}, stop).
 
-%%% ----------------------------------------------------------------------------
-%%% @doc Server status interface
-%%% @spec status() -> {atom(ok), record(state)}
-%%% @end
-%%% ----------------------------------------------------------------------------
-status() ->
-    gen_server:call(?MODULE, {status}).
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server tree interface
+%%
+%% @spec tree(Name) -> {ok, Tree} | {error, Reason}
+%%  where
+%%      Name = term()
+%% @end
+%%------------------------------------------------------------------------------
+tree(Name) ->
+    gen_server:call({global, Name}, {tree}).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server intersects interface
+%%
+%% @spec intersects(X, Y) -> {ok, bool()} | {error, Reason}
+%%  where
+%%      X = float()
+%%      Y = float()
+%% @end
+%%------------------------------------------------------------------------------
+intersects(Name, X, Y) ->
+    gen_server:call({global, Name}, {intersects, X, Y}).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server load interface
+%%
+%% @spec load(Dsn) -> {ok, Bool} | {error, Reason}
+%%  where
+%%      Dsn = string()
+%%      Bool = bool()
+%% @end
+%%------------------------------------------------------------------------------
+load(Name, Dsn) ->
+    gen_server:call({global, Name}, {load, Dsn}).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server status interface
+%%
+%% @spec status() -> {ok, State}
+%% @end
+%%------------------------------------------------------------------------------
+status(Name) ->
+    gen_server:call({global, Name}, {status}).
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%% EXPORTED FUNCTIONS/GEN_SERVER CALLBACKS
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% =============================================================================
+%% EXPORTED FUNCTIONS/GEN_SERVER CALLBACKS
+%% =============================================================================
 
-%%% ----------------------------------------------------------------------------
-%%% @doc Handle start/start_link server callback function
-%%% @spec init(atom(no_args)) -> {ok, state()}
-%%% @end
-%%% ----------------------------------------------------------------------------
-init(no_args) ->
+%%------------------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handle start/start_link server callback function
+%%
+%% @spec init(Args) -> {ok, State} | ignore | {stop, Reason}
+%% @end
+%%------------------------------------------------------------------------------
+init([Name, Capacity]) ->
     process_flag(trap_exit, true),
-    {ok, Table} = rtree:create_ets(?MODULE),
-    %% {ok, Tree} = rtree:tree_from_ets(Table),
-    {ok, #state{tree=undefined, table=Table, ok_count=0, error_count=0}}.
+    {ok, Table} = rtree:create_ets(Name),
+    {ok, #state{name=Name,
+            capacity=Capacity,
+            tree=undefined,
+            table=Table,
+            ok_count=0,
+            error_count=0}}.
 
-%%% ----------------------------------------------------------------------------
-%%% @doc Handle call server callback function
-%%% @spec handle_call(Call::term(), From::{pid(), reference()}, state()) ->
-%%%  {atom(reply), Reply, state()}
-%%% @end
-%%% ----------------------------------------------------------------------------
-handle_call({tree}, _, State) ->
+%%------------------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handle call server callback function
+%%
+%% @spec handle_call(Request, From, State) ->
+%%     {reply, Reply, State} |
+%%     {noreply, State} |
+%%     {stop, Reason, Reply, State} |
+%%     {stop, Reason, State}
+%% @end
+%%------------------------------------------------------------------------------
+handle_call({tree}, _From, State) ->
     case rtree:tree_from_ets(State#state.table) of
         {ok, Tree} -> {reply, ok, State#state{tree=Tree}};
         {error, Reason} -> {reply, {error, Reason}, State}
@@ -129,21 +196,25 @@ handle_call({intersects, X, Y}, _, State) ->
                     State#state{error_count=State#state.error_count + 1}}
             end
     end;
-handle_call({load, Dsn}, _, State) ->
+handle_call({load, Dsn}, _From, State) ->
     case rtree:load_to_ets(Dsn, State#state.table) of
         {ok, Table} -> {reply, {ok, Table}, State#state{table=Table}};
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
-handle_call({status}, _, State) ->
+handle_call({status}, _From, State) ->
     {reply, {ok, State}, State}.
 
 
-%%% ----------------------------------------------------------------------------
-%%% @doc Handle cast server callback function
-%%% @spec handle_cast(Cast::term(), state()) ->
-%%%  {atom(stop), Reason::string(), state()}
-%%% @end
-%%% ----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handle cast server callback function
+%%
+%% @spec handle_cast(Msg, State) ->
+%%     {noreply, State}
+%%     {stop, Reason, State}
+%% @end
+%%------------------------------------------------------------------------------
 handle_cast(stop, State) ->
     io:format("Cast: ~p~n", [State]),
     {stop, normal, State};
@@ -151,37 +222,47 @@ handle_cast(Cast, State) ->
     io:format("Cast: ~p~n", [State]),
     {stop, {"Can't not handle cast", Cast}, State}.
 
-%%% ----------------------------------------------------------------------------
-%%% @doc Handle info server callback function
-%%% @spec handle_info(term(), state()) ->
-%%% {atom(stop), Reason::string(), state()}
-%%% @end
-%%% ----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handle info server callback function
+%%
+%% @spec handle_info(Info, State) ->
+%%     {noreply, State} |
+%%     {stop, Reason, State}
+%% @end
+%%------------------------------------------------------------------------------
 handle_info(Info, State) ->
     io:format("Info: ~p~n", [State]),
     {stop, {"Can't not handle info", Info}, State}.
 
-%%% ----------------------------------------------------------------------------
-%%% @doc Code change server callback function
-%%% @spec code_change(OldVsn::term(), state(), Extra::[term()]) ->
-%%%  {atom(ok), state()}
-%%% @end
-%%% ----------------------------------------------------------------------------
-code_change(_, State, _) -> 
+%%------------------------------------------------------------------------------
+%% @private
+%% @doc
+%% Code change server callback function
+%%
+%% @spec code_change(OldVsn, State, Extra) ->
+%%     {ok, NewState}
+%% @end
+%%------------------------------------------------------------------------------
+code_change(_OldVsn, State, _Extra) -> 
     io:format("Code Change: ~p~n", [State]),
     {ok, State}.
 
-%%% ----------------------------------------------------------------------------
-%%% @doc Terminate server callback function
-%%% @spec terminate(Reason::term(), State::state()) -> none()
-%%% @end
-%%% ----------------------------------------------------------------------------
+%%------------------------------------------------------------------------------
+%% @private
+%% @doc
+%% Terminate server callback function. Do any necessary cleaning up.
+%%
+%% @spec terminate(Reason, State) -> void()
+%% @end
+%%------------------------------------------------------------------------------
 terminate(shutdown, State) -> 
     io:format("Terminate: ~p~n", [State]);
 terminate(_, _) -> ok.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%% INTERNAL FUNCTIONS
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% =============================================================================
+%% INTERNAL FUNCTIONS
+%% =============================================================================
 
-% rtree module
+%% rtree module

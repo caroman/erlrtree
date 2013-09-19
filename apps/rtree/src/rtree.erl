@@ -1,3 +1,10 @@
+%%%----------------------------------------------------------------
+%%% @author Carlos Roman <caroman@gmail.com>
+%%% @doc
+%%%   Module with rtree functions
+%%% @copyright 2013 Carlos Roman
+%%% @end
+%%%----------------------------------------------------------------
 -module(rtree).
 
 -include("rtree.hrl").

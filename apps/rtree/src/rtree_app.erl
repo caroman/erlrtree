@@ -1,3 +1,10 @@
+%%%----------------------------------------------------------------
+%%% @author Carlos Roman <caroman@gmail.com>
+%%% @doc
+%%%   Application behaviour implementation for rtree server.
+%%% @copyright 2013 Carlos Roman
+%%% @end
+%%%----------------------------------------------------------------
 -module(rtree_app).
 
 -behaviour(application).

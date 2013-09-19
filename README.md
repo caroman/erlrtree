@@ -50,36 +50,20 @@ erl attach
 ~~~~~~~~~~
 
     # rel/rtree/bin/rtree attach
-    # rtree_server:load("/home/caroman/Projects/caroman/erlrtree/deps/erlogr/test/polygon.shp").
-    # rtree_server:intersects(1.0, -1.0).
+    # rtree_server:load(tree01, "/home/caroman/Projects/caroman/erlrtree/deps/erlogr/test/polygon.shp").
+    # rtree_server:tree(tree01).
+    # rtree_server:intersects(tree01, 1.0, -1.0).
 
 
 erl call
 ~~~~~~~~
     
     # erl_call -c rtree -n rtree@127.0.0.1 -a \
-        "rtree_server load [\"/home/caroman/Projects/caroman/erlrtree/deps/erlogr/test/polygon.shp\"']"
+        "rtree_server load [tree01 '\"/home/caroman/Projects/caroman/erlrtree/deps/erlogr/test/polygon.shp\"']"
     # erl_call -c rtree -n rtree@127.0.0.1 -a \
-        "rtree_server tree []"
+        "rtree_server tree [tree01]"
     # erl_call -c rtree -a -n rtree@127.0.0.1 -a \
-        "rtree_server intersects [1.0 -1.0]"
-
-
-py interface
-~~~~~~~~~~~~~
-
-    # python \
-         /home/caroman/Projects/skysbird/py_interface/examples/test_remote_exec.py \
-         -d -t 10 -n pyrtree@127.0.0.1 -c rtree rtree@127.0.0.1 \
-         rtree_server load '"/home/caroman/Projects/caroman/erlrtree/deps/erlogr/test/polygon.sh"'
-    # python \
-         /home/caroman/Projects/skysbird/py_interface/examples/test_remote_exec.py \
-         -d -t 10 -n pyrtree@127.0.0.1 -c rtree rtree@127.0.0.1 \
-         rtree_server tree 
-    # python \
-        /home/caroman/Projects/skysbird/py_interface/examples/test_remote_exec.py \
-        -d -t 10 -n pyrtree@127.0.0.1 -c rtree rtree@127.0.0.1 \
-        rtree_server intersects 1.0 -1.0
+        "rtree_server intersects [tree01 1.0 -1.0]"
 
 
 erlrtree utility
@@ -87,6 +71,6 @@ erlrtree utility
 
     # cd utils/py_rtree
     # source setenv
-    # erlrtree_client.py load /home/caroman/Projects/caroman/erlrtree/deps/erlogr/test/polygon.shp
-    # erlrtree_client.py build
-    # erlrtree_client.py --verbose debug intersects '1.0,1.0' '1.0,-1.0'
+    # erlrtree_client.py load tree01 /home/caroman/Projects/caroman/erlrtree/deps/erlogr/test/polygon.shp
+    # erlrtree_client.py build tree01
+    # erlrtree_client.py --verbose debug intersects tree01 '1.0,1.0' '1.0,-1.0'
