@@ -45,6 +45,8 @@ def main(argv):
         ,help="""Timeout for response. Default %(default)s seconds.
             If timeout is `0` then no timeout is set.""")
 
+    parser.add_argument("tree_name"
+        ,help="""Server name of tree to query.""")
 
     subparsers = parser.add_subparsers(help='ErlRTree actions.')
 
@@ -99,7 +101,7 @@ def main(argv):
     if args.action == "load":
         module_name = 'rtree_server'
         function_name = 'load'
-        function_args = [args.dsn]
+        function_args = ["'%s'" % args.tree_name, args.dsn]
 
         # Translate arguments to erlang types
         erlang_args = erlrtree.node.args_to_erlargs(function_args)
@@ -116,7 +118,7 @@ def main(argv):
                 function_name,
                 erlang_args,
                 args.timeout)
-        except node.Timeout as error:
+        except erlrtree.node.Timeout as error:
             LOGGER.error(error)
             return 1
         print "RESPONSE", msg
@@ -124,7 +126,10 @@ def main(argv):
     elif args.action == "build":
         module_name = 'rtree_server'
         function_name = 'tree'
-        erlang_args = []
+        function_args = ["'%s'" % args.tree_name]
+
+        # Translate arguments to erlang types
+        erlang_args = erlrtree.node.args_to_erlargs(function_args)
 
         # Create, start, and connect python node
         LOGGER.info("Connecting node")
@@ -136,7 +141,7 @@ def main(argv):
                 module_name,
                 function_name,
                 erlang_args)
-        except node.Timeout as error:
+        except erlrtree.node.Timeout as error:
             LOGGER.error(error)
             return 1
         print "RESPONSE", msg
@@ -144,7 +149,7 @@ def main(argv):
     elif args.action == 'intersects':
         module_name = 'rtree_server'
         function_name = 'intersects'
-        function_args = [map(float, point.split(","))
+        function_args = ["'%s'" % args.tree_name] + [map(float, point.split(","))
             for point in args.points]
 
         # Translate arguments to erlang types
