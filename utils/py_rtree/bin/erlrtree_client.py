@@ -45,13 +45,20 @@ def main(argv):
         ,help="""Timeout for response. Default %(default)s seconds.
             If timeout is `0` then no timeout is set.""")
 
-    parser.add_argument("tree_name"
-        ,help="""Server name of tree to query.""")
 
     subparsers = parser.add_subparsers(help='ErlRTree actions.')
 
+    parser_create = subparsers.add_parser('create', help='Create an rtree server.')
+    parser_create.set_defaults(action='create')
+
+    parser_create.add_argument("tree_name"
+        ,help="""Server name of tree to query.""")
+
     parser_load = subparsers.add_parser('load', help='Load a datasource.')
     parser_load.set_defaults(action='load')
+
+    parser_load.add_argument("tree_name"
+        ,help="""Server name of tree to query.""")
 
     parser_load.add_argument('dsn',
         metavar='DSN',
@@ -61,6 +68,9 @@ def main(argv):
         help='Build STRTree from loaded DSNs.')
     parser_build.set_defaults(action='build')
 
+    parser_build.add_argument("tree_name"
+        ,help="""Server name of tree to query.""")
+
     parser_build.add_argument('filter',
         default=None,
         nargs='?',
@@ -69,6 +79,9 @@ def main(argv):
     parser_intersects = subparsers.add_parser('intersects',
         help='Query for intersects.')
     parser_intersects.set_defaults(action='intersects')
+
+    parser_intersects.add_argument("tree_name"
+        ,help="""Server name of tree to query.""")
 
     parser_intersects.add_argument('points',
         metavar="'X,Y'",
@@ -98,7 +111,31 @@ def main(argv):
     # Main Process
     # Prepare RPC mfa (module, function, [arg1, ...])
     
-    if args.action == "load":
+    if args.action == "create":
+        module_name = 'rtree_server'
+        function_name = 'create'
+        function_args = ["'%s'" % args.tree_name]
+
+        # Translate arguments to erlang types
+        erlang_args = erlrtree.node.args_to_erlargs(function_args)
+
+        # Create, start, and connect python node
+        LOGGER.info("Connecting node")
+        node_helper = NodeHelper(args.python_node_name,
+            args.cookie,
+            args.timeout,
+            args.verbose == "debug")
+        try:
+            msg = node_helper.send_sync_rpc(args.remote_node,
+                module_name,
+                function_name,
+                erlang_args,
+                args.timeout)
+        except erlrtree.node.Timeout as error:
+            LOGGER.error(error)
+            return 1
+        print "RESPONSE", msg
+    elif args.action == "load":
         module_name = 'rtree_server'
         function_name = 'load'
         function_args = ["'%s'" % args.tree_name, args.dsn]
@@ -151,9 +188,10 @@ def main(argv):
         function_name = 'intersects'
         function_args = ["'%s'" % args.tree_name] + [map(float, point.split(","))
             for point in args.points]
-
         # Translate arguments to erlang types
         erlang_args = erlrtree.node.args_to_erlargs(function_args)
+        tree_erlang_arg = erlang_args[0]
+        point_erlang_args = erlang_args[1:]
 
         # Create, start, and connect python node
         LOGGER.debug("Connecting node")
@@ -161,8 +199,9 @@ def main(argv):
             args.cookie,
             args.timeout)
 
-        rpcs = [(args.remote_node, module_name, function_name, arg)
-            for arg in erlang_args]
+        rpcs = [(args.remote_node, module_name, function_name,
+            [tree_erlang_arg] + point_erlang_arg)
+            for point_erlang_arg in point_erlang_args]
 
         output_queue = node_helper.send_async_rpcs(rpcs)
         
