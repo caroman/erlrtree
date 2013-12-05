@@ -1,8 +1,22 @@
+% Copyright 2013 Carlos Roman
+%
+% Licensed under the Apache License, Version 2.0 (the "License"); you may not
+% use this file except in compliance with the License. You may obtain a copy of
+% the License at
+%
+%   http://www.apache.org/licenses/LICENSE-2.0
+%
+% Unless required by applicable law or agreed to in writing, software
+% distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+% WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+% License for the specific language governing permissions and limitations under
+% the License.
+
 -module(rtree_client).
 -export([main/1]).
 -mode(compile).
 
--define(DEFAULT_JOBS, 3).
+-define(ESCRIPT, filename:basename(escript:script_name())).
 
 %% ====================================================================
 %% Public API
@@ -20,14 +34,14 @@ main(Args) ->
             halt(1)
     end.
 
-
+%% ====================================================================
+%% Parser
+%% ====================================================================
 
 usage() ->
     OptSpecList = main_option_spec_list(),
     getopt:usage(OptSpecList, "rtree_client",
-                 "-- [options] args",
-                 [{"options", "connection options"},
-                  {"command", "Command to run (create, load, build, intersects)"}]).
+                 "command_args -- [options]").
 
 command_create_usage() ->
     OptSpecList = command_create_option_spec_list(),
@@ -49,11 +63,11 @@ command_intersects_usage() ->
 %% options accepted via getopt
 %%
 main_option_spec_list() ->
-    Jobs = ?DEFAULT_JOBS,
-    JobsHelp = io_lib:format(
-        "Number of concurrent workers a command may use. Default: ~B",
-        [Jobs]),
-    VerboseHelp = "Verbosity level (-v, -vv, -vvv, --verbose 3). Default: 0",
+    %Jobs = ?DEFAULT_JOBS,
+    %JobsHelp = io_lib:format(
+    %    "Number of concurrent workers a command may use. Default: ~B",
+    %    [Jobs]),
+    %VerboseHelp = "Verbosity level (-v, -vv, -vvv, --verbose 3). Default: 0",
     [
      %% {Name, ShortOpt, LongOpt, ArgSpec, HelpMsg}
      {help,         $h,         "help",         undefined,
@@ -64,11 +78,11 @@ main_option_spec_list() ->
      %%   "Show version information"},
      %%{force,        $f,         "force",        undefined,
      %%   "Force"},
-     {node_name,    $n,         "node_name",    {string, "rtree_client"},
+     {node_name,    $n,         "node_name",    {atom, node_name()},
         "Set the client node's <name|sname>. Default rtree_client."},
-     {remote_node,  $r,         "remote_node",  {string, "rtree@127.0.0.1"},
+     {remote_node,  $r,         "remote_node",  {atom, list_to_atom("rtree@127.0.0.1")},
         "Node <name|sname> to connect to. Default rtree@127.0.0.1."},
-     {cookie,       $c,         "cookie",       {string, "rtree"},
+     {cookie,       $c,         "cookie",       {atom, rtree},
         "Set cookie. Default rtree."},
      {timeout,      $t,         "timeout",      {integer, 10},
         "Timeout for response. Default 10 seconds. If is 0 then none is set."},
@@ -189,28 +203,31 @@ command_parse_args(ParserArgs, OptionSpecListFun, UsageFun) ->
             halt(1)
     end.
 
-
 %% ====================================================================
-%% Internal functions
+%% Execution
 %% ====================================================================
 
-%run([StringX, StringY]) ->
-%    try
-%        X = list_to_float(StringX),
-%        Y = list_to_float(StringY),
-%        Wkt = astext(X, Y),
-%        io:format("Input:~f ~f = ~w\n", [X, Y, Wkt])
-%    catch
-%        _:_ ->
-%            usage(),
-%            halt(1)
-%    end;
 run(RawArgs) ->
     {Options, Args} = parse_args(RawArgs),
     run_command(proplists:get_value(command, Options), Options, Args).
 
 run_command(create, Options, Args) ->
-    io:format("Run create: ~p~p~n", [Options, Args]);
+    io:format("Run create: ~p~p~n", [Options, Args]),
+    NodeName = proplists:get_value(node_name, Options),
+    Cookie = proplists:get_value(cookie, Options),
+    RemoteNode = proplists:get_value(remote_node, Options),
+    TreeName = proplists:get_value(tree_name, Options),
+    net_kernel:start([NodeName, longnames]),
+    erlang:set_cookie(NodeName, Cookie),
+    case net_adm:ping(RemoteNode) of
+        pong ->
+            Res = rpc:call(RemoteNode, rtree_server, create, [TreeName]),
+            io:format("~p~n",[Res]),
+            halt(0);
+        Else ->
+            io:format("~s: ~s ~p~n", [?ESCRIPT, NodeName, Else]),
+            halt(1)
+    end;
 run_command(load, Options, Args) ->
     io:format("Run load: ~p~p~n", [Options, Args]);
 run_command(build, Options, Args) ->
@@ -218,7 +235,10 @@ run_command(build, Options, Args) ->
 run_command(intersects, Options, Args) ->
     io:format("Run intersects: ~p~p~n", [Options, Args]).
 
-%%astext(X, Y) ->
-%%    Pt = {'Point',[X, Y]},
-%%    Pt1 = erlgeom:to_geom(Pt),
-%%    erlgeom:from_geom(Pt1).
+%% ====================================================================
+%% Helper Functions
+%% ====================================================================
+
+node_name() ->
+    Localhost = net_adm:localhost(),
+    list_to_atom(?ESCRIPT ++ "@" ++ Localhost).

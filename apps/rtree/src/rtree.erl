@@ -1,3 +1,17 @@
+% Copyright 2013 Carlos Roman
+%
+% Licensed under the Apache License, Version 2.0 (the "License"); you may not
+% use this file except in compliance with the License. You may obtain a copy of
+% the License at
+%
+%   http://www.apache.org/licenses/LICENSE-2.0
+%
+% Unless required by applicable law or agreed to in writing, software
+% distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+% WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+% License for the specific language governing permissions and limitations under
+% the License.
+
 %%%----------------------------------------------------------------
 %%% @author Carlos Roman <caroman@gmail.com>
 %%% @doc
@@ -12,6 +26,7 @@
 -export([
     create_ets/1,
     load_to_ets/2,
+    load_to_list/1,
     tree_from_ets/1,
     intersects/3
     ]).
@@ -51,6 +66,27 @@ load_to_ets(Dsn, Table) ->
                 || _ <- lists:seq(1, Count)],
             lists:foreach(fun(R) -> ets:insert(Table, R) end, Records),
             {ok, Table};
+        undefined -> {error, "Not possible to open datasource"}
+    end.
+
+%%% ----------------------------------------------------------------------------
+%%% @doc Load into a list of features
+%%% @spec load_to_list(Dsn) -> [tuple()] || {atom(error), atom()}
+%%% @end
+%%% ----------------------------------------------------------------------------
+load_to_list(Dsn) ->
+    WkbReader = erlgeom:wkbreader_create(),
+    case erlogr:open(Dsn) of
+        {ok, DataSource} ->
+            {ok, Layer} = erlogr:ds_get_layer(DataSource, 0),
+            {ok, FeatDefn} = erlogr:l_get_layer_defn(Layer),
+            Header = lists:map(fun(Field) -> list_to_atom(Field) end,
+                tuple_to_list(element(2, erlogr:fd_get_fields_name(FeatDefn)))),
+            {ok, Count} = erlogr:l_get_feature_count(Layer),
+            Records = [feature_to_tuple(WkbReader, Header,
+                element(2, erlogr:l_get_next_feature(Layer))) %% {ok, Feature}
+                || _ <- lists:seq(1, Count)],
+            Records;
         undefined -> {error, "Not possible to open datasource"}
     end.
 
@@ -100,7 +136,4 @@ intersects(Tree, X, Y) ->
     InElements = [E || E <- Elements,
         erlgeom:intersects(element(3, E), Point) == true],
     {ok, InElements}.
-
-
-
 
