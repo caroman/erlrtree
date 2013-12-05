@@ -34,7 +34,7 @@
 %%% ----------------------------------------------------------------------------
 %%% @doc Create ETS Table to hold elements for the RTree
 %%% @spec create_ets(Table::atom) 
-%%%     -> atom(ok, Table) || {atom(error), Reason::string()}
+%%%     -> {atom(ok), Table::atom} | {atom(error), Reason::string()}
 %%% @end
 %%% ----------------------------------------------------------------------------
 create_ets(Table) ->
@@ -49,7 +49,7 @@ create_ets(Table) ->
 %%% ----------------------------------------------------------------------------
 %%% @doc Load File into an rtree ETS named Name to be used by rtree as a 
 %%% container for the geometry objects
-%%% @spec load_to_ets(Dsn, Table) -> atom(ok) || {atom(error), atom()}
+%%% @spec load_to_ets(Dsn, Table) -> atom(ok) | {atom(error), atom()}
 %%% @end
 %%% ----------------------------------------------------------------------------
 load_to_ets(Dsn, Table) ->
@@ -71,7 +71,7 @@ load_to_ets(Dsn, Table) ->
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Load into a list of features
-%%% @spec load_to_list(Dsn) -> [tuple()] || {atom(error), atom()}
+%%% @spec load_to_list(Dsn) -> [tuple()] | {atom(error), atom()}
 %%% @end
 %%% ----------------------------------------------------------------------------
 load_to_list(Dsn) ->
@@ -92,8 +92,8 @@ load_to_list(Dsn) ->
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Create STRtree from rtree ETS
-%%% @spec tree_from_ets(File, Name) 
-%%%     -> atom(ok) || {atom(error), Reason::string()}
+%%% @spec tree_from_ets(Table) 
+%%%     -> atom(ok) | {atom(error), Reason::string()}
 %%% @end
 %%% ----------------------------------------------------------------------------
 tree_from_ets(Table) ->
@@ -113,7 +113,7 @@ tree_from_ets(Table) ->
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Helper to convert Feature from Layer into a Record for the ETS
-%%% @spec feature_to_record(WkbReader, Feature Header) -> record(feature)
+%%% @spec feature_to_tuple(WkbReader, Header, Feature) -> record(feature)
 %%% @end
 %%% ----------------------------------------------------------------------------
 feature_to_tuple(WkbReader, Header, Feature) ->

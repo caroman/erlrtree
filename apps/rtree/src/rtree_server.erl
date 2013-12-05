@@ -94,7 +94,7 @@ create(Name, Capacity) ->
 
 %% @spec create(Name) -> void()
 %% @equiv create(Name, DefaultCapacity)
-ggcreate(Name) ->
+create(Name) ->
     create(Name, ?DEFAULT_CAPACITY).
 
 %%------------------------------------------------------------------------------
@@ -125,7 +125,7 @@ tree(Name) ->
 %% @doc
 %% Server intersects interface
 %%
-%% @spec intersects(X, Y) -> {ok, bool()} | {error, Reason}
+%% @spec intersects(Name, X, Y) -> {ok, bool()} | {error, Reason}
 %%  where
 %%      X = float()
 %%      Y = float()
@@ -138,7 +138,7 @@ intersects(Name, X, Y) ->
 %% @doc
 %% Server load interface
 %%
-%% @spec load(Dsn) -> {ok, Bool} | {error, Reason}
+%% @spec load(Name, Dsn) -> {ok, Bool} | {error, Reason}
 %%  where
 %%      Dsn = string()
 %%      Bool = bool()
@@ -151,7 +151,7 @@ load(Name, Dsn) ->
 %% @doc
 %% Server status interface
 %%
-%% @spec status() -> {ok, State}
+%% @spec status(Name) -> {ok, State}
 %% @end
 %%------------------------------------------------------------------------------
 status(Name) ->
@@ -225,8 +225,7 @@ handle_call({status}, _From, State) ->
 %% Handle cast server callback function
 %%
 %% @spec handle_cast(Msg, State) ->
-%%     {noreply, State}
-%%     {stop, Reason, State}
+%%     {noreply, State} | {stop, Reason, State}
 %% @end
 %%------------------------------------------------------------------------------
 handle_cast(stop, State) ->

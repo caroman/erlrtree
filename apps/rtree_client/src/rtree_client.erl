@@ -12,6 +12,13 @@
 % License for the specific language governing permissions and limitations under
 % the License.
 
+%%%----------------------------------------------------------------
+%%% @author Carlos Roman <caroman@gmail.com>
+%%% @doc
+%%%   Escript with rtree client
+%%% @copyright 2013 Carlos Roman
+%%% @end
+%%%----------------------------------------------------------------
 -module(rtree_client).
 -export([main/1]).
 -mode(compile).
@@ -22,7 +29,13 @@
 %% Public API
 %% ====================================================================
 
-%% escript Entry point
+%%------------------------------------------------------------------------------
+%% @doc
+%% Entry point
+%%
+%% @spec main(Args) -> atom(ok)
+%% @end
+%%------------------------------------------------------------------------------
 main(Args) ->
     os:putenv("ESCRIPT", "1"),
     case catch(run(Args)) of
@@ -38,30 +51,69 @@ main(Args) ->
 %% Parser
 %% ====================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Main usage function
+%%
+%% @spec usage() -> ok
+%% @end
+%%------------------------------------------------------------------------------
 usage() ->
     OptSpecList = main_option_spec_list(),
     getopt:usage(OptSpecList, "rtree_client",
                  "command_args -- [options]").
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command create parser specific usage
+%%
+%% @spec command_create_usage() -> ok
+%% @end
+%%------------------------------------------------------------------------------
 command_create_usage() ->
     OptSpecList = command_create_option_spec_list(),
     getopt:usage(OptSpecList, "rtree_client create --").
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command create load specific usage
+%%
+%% @spec command_load_usage() -> ok
+%% @end
+%%------------------------------------------------------------------------------
 command_load_usage() ->
     OptSpecList = command_create_option_spec_list(),
     getopt:usage(OptSpecList, "rtree_client load --").
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command create build specific usage
+%%
+%% @spec command_build_usage() -> ok
+%% @end
+%%------------------------------------------------------------------------------
 command_build_usage() ->
     OptSpecList = command_create_option_spec_list(),
     getopt:usage(OptSpecList, "rtree_client build --").
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command create intersects specific usage
+%%
+%% @spec command_intersects_usage() -> ok
+%% @end
+%%------------------------------------------------------------------------------
 command_intersects_usage() ->
     OptSpecList = command_create_option_spec_list(),
     getopt:usage(OptSpecList, "rtree_client intersects --").
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Main option specification list
 %%
-%% options accepted via getopt
-%%
+%% @spec main_option_spec_list() -> ok
+%% @end
+%%------------------------------------------------------------------------------
 main_option_spec_list() ->
     %Jobs = ?DEFAULT_JOBS,
     %JobsHelp = io_lib:format(
@@ -90,6 +142,13 @@ main_option_spec_list() ->
         "Execute command. Options create, load, build, intersects. "}
     ].
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command create specific option specification list
+%%
+%% @spec command_create_option_spec_list() -> ok
+%% @end
+%%------------------------------------------------------------------------------
 command_create_option_spec_list() ->
     [
      %% {Name, ShortOpt, LongOpt, ArgSpec, HelpMsg}
@@ -99,6 +158,13 @@ command_create_option_spec_list() ->
         "Tree name for rtree server (gen_server and ets)."}
     ].
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command load specific option specification list
+%%
+%% @spec command_load_option_spec_list() -> ok
+%% @end
+%%------------------------------------------------------------------------------
 command_load_option_spec_list() ->
     [
      %% {Name, ShortOpt, LongOpt, ArgSpec, HelpMsg}
@@ -108,6 +174,13 @@ command_load_option_spec_list() ->
         "Tree name for rtree server (gen_server and ets)."}
     ].
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command build specific option specification list
+%%
+%% @spec command_build_option_spec_list() -> ok
+%% @end
+%%------------------------------------------------------------------------------
 command_build_option_spec_list() ->
     [
      %% {Name, ShortOpt, LongOpt, ArgSpec, HelpMsg}
@@ -117,6 +190,13 @@ command_build_option_spec_list() ->
         "Tree name for rtree server (gen_server and ets)."}
     ].
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command intersects specific option specification list
+%%
+%% @spec command_intersects_option_spec_list() -> ok
+%% @end
+%%------------------------------------------------------------------------------
 command_intersects_option_spec_list() ->
     [
      %% {Name, ShortOpt, LongOpt, ArgSpec, HelpMsg}
@@ -126,9 +206,13 @@ command_intersects_option_spec_list() ->
         "Tree name for rtree server (gen_server and ets)."}
     ].
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Parse command line arguments
 %%
-%% Parse command line arguments using getopt
-%%
+%% @spec parse_args(RawArgs) -> {Options, Args}
+%% @end
+%%------------------------------------------------------------------------------
 parse_args(RawArgs) ->
     %% Parse getopt options
     OptSpecList = main_option_spec_list(),
@@ -185,6 +269,14 @@ parse_args(RawArgs) ->
             halt(1)
     end.
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Parse command line arguments according to input functions
+%%
+%% @spec command_parse_args(ParserArgs, OptionSpecListFun, UsageFun) ->
+%%  {Options, Args}
+%% @end
+%%------------------------------------------------------------------------------
 command_parse_args(ParserArgs, OptionSpecListFun, UsageFun) ->
     OptSpecList = OptionSpecListFun(),
     case getopt:parse_and_check(OptSpecList, ParserArgs) of
@@ -207,10 +299,24 @@ command_parse_args(ParserArgs, OptionSpecListFun, UsageFun) ->
 %% Execution
 %% ====================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Read raw arguments parse them and execute command
+%%
+%% @spec run(RawArgs) -> ok
+%% @end
+%%------------------------------------------------------------------------------
 run(RawArgs) ->
     {Options, Args} = parse_args(RawArgs),
     run_command(proplists:get_value(command, Options), Options, Args).
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Run specific command 
+%%
+%% @spec run_command(create, Options, Args) -> ok
+%% @end
+%%------------------------------------------------------------------------------
 run_command(create, Options, Args) ->
     io:format("Run create: ~p~p~n", [Options, Args]),
     NodeName = proplists:get_value(node_name, Options),
@@ -228,10 +334,31 @@ run_command(create, Options, Args) ->
             io:format("~s: ~s ~p~n", [?ESCRIPT, NodeName, Else]),
             halt(1)
     end;
+%%------------------------------------------------------------------------------
+%% @doc
+%% Run specific command 
+%%
+%% @spec run_command(load, Options, Args) -> ok
+%% @end
+%%------------------------------------------------------------------------------
 run_command(load, Options, Args) ->
     io:format("Run load: ~p~p~n", [Options, Args]);
+%%------------------------------------------------------------------------------
+%% @doc
+%% Run specific command 
+%%
+%% @spec run_command(build, Options, Args) -> ok
+%% @end
+%%------------------------------------------------------------------------------
 run_command(build, Options, Args) ->
     io:format("Run build: ~p~p~n", [Options, Args]);
+%%------------------------------------------------------------------------------
+%% @doc
+%% Run specific command 
+%%
+%% @spec run_command(intersects, Options, Args) -> ok
+%% @end
+%%------------------------------------------------------------------------------
 run_command(intersects, Options, Args) ->
     io:format("Run intersects: ~p~p~n", [Options, Args]).
 
@@ -239,6 +366,13 @@ run_command(intersects, Options, Args) ->
 %% Helper Functions
 %% ====================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Get the node name from the escript name plus the hostname
+%%
+%% @spec node_name() -> NodeName::atom
+%% @end
+%%------------------------------------------------------------------------------
 node_name() ->
     Localhost = net_adm:localhost(),
     list_to_atom(?ESCRIPT ++ "@" ++ Localhost).
