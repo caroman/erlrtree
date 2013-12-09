@@ -205,14 +205,15 @@ handle_call({intersects, X, Y}, _, State) ->
         true ->
             case rtree:intersects(State#state.tree, X, Y) of
                 {ok, Geoms} -> {reply, {ok, Geoms},
-                    State#state{ok_count=State#state.ok_count + 1}};
-                {error, Reason} -> {reply, {error, Reason},
-                    State#state{error_count=State#state.error_count + 1}}
+                    State#state{ok_count=State#state.ok_count + 1}}
+                %{error, Reason} -> {reply, {error, Reason},
+                %    State#state{error_count=State#state.error_count + 1}}
             end
     end;
 handle_call({load, Dsn}, _From, State) ->
-    case rtree:load_to_ets(Dsn, State#state.table) of
-        {ok, Table} -> {reply, {ok, Table}, State#state{table=Table}};
+    Table = State#state.table,
+    case rtree:load_to_ets(Dsn, Table) of
+        ok -> {reply, {ok, Table}, State#state{table=Table}};
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
 handle_call({status}, _From, State) ->

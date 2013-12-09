@@ -82,7 +82,7 @@ command_create_usage() ->
 %% @end
 %%------------------------------------------------------------------------------
 command_load_usage() ->
-    OptSpecList = command_create_option_spec_list(),
+    OptSpecList = command_load_option_spec_list(),
     getopt:usage(OptSpecList, "rtree_client load --").
 
 %%------------------------------------------------------------------------------
@@ -93,7 +93,7 @@ command_load_usage() ->
 %% @end
 %%------------------------------------------------------------------------------
 command_build_usage() ->
-    OptSpecList = command_create_option_spec_list(),
+    OptSpecList = command_build_option_spec_list(),
     getopt:usage(OptSpecList, "rtree_client build --").
 
 %%------------------------------------------------------------------------------
@@ -104,7 +104,7 @@ command_build_usage() ->
 %% @end
 %%------------------------------------------------------------------------------
 command_intersects_usage() ->
-    OptSpecList = command_create_option_spec_list(),
+    OptSpecList = command_intersects_option_spec_list(),
     getopt:usage(OptSpecList, "rtree_client intersects --").
 
 %%------------------------------------------------------------------------------
@@ -171,7 +171,9 @@ command_load_option_spec_list() ->
      {help,         $h,         "help",         undefined,
         "Show the program options"},
      {tree_name,    undefined,  undefined,      atom,
-        "Tree name for rtree server (gen_server and ets)."}
+        "Tree name for rtree server (gen_server and ets)."},
+     {dsn,    undefined,  undefined,      string,
+        "Data source name."}
     ].
 
 %%------------------------------------------------------------------------------
@@ -317,23 +319,13 @@ run(RawArgs) ->
 %% @spec run_command(create, Options, Args) -> ok
 %% @end
 %%------------------------------------------------------------------------------
-run_command(create, Options, Args) ->
-    io:format("Run create: ~p~p~n", [Options, Args]),
-    NodeName = proplists:get_value(node_name, Options),
-    Cookie = proplists:get_value(cookie, Options),
-    RemoteNode = proplists:get_value(remote_node, Options),
+run_command(create, Options, _Args) ->
+    io:format("Run create: ~p~n", [Options]),
+    RemoteNode = connect(Options),
+    io:format("Remote node: ~p~n", [RemoteNode]),
     TreeName = proplists:get_value(tree_name, Options),
-    net_kernel:start([NodeName, longnames]),
-    erlang:set_cookie(NodeName, Cookie),
-    case net_adm:ping(RemoteNode) of
-        pong ->
-            Res = rpc:call(RemoteNode, rtree_server, create, [TreeName]),
-            io:format("~p~n",[Res]),
-            halt(0);
-        Else ->
-            io:format("~s: ~s ~p~n", [?ESCRIPT, NodeName, Else]),
-            halt(1)
-    end;
+    Res = rpc:call(RemoteNode, rtree_server, create, [TreeName]),
+    io:format("~p~n",[Res]);
 %%------------------------------------------------------------------------------
 %% @doc
 %% Run specific command 
@@ -342,7 +334,23 @@ run_command(create, Options, Args) ->
 %% @end
 %%------------------------------------------------------------------------------
 run_command(load, Options, Args) ->
-    io:format("Run load: ~p~p~n", [Options, Args]);
+    io:format("Run load: ~p~p~n", [Options, Args]),
+    RemoteNode = connect(Options),
+    io:format("Remote node: ~p~n", [RemoteNode]),
+    TreeName = proplists:get_value(tree_name, Options),
+    Dsn = proplists:get_value(dsn, Options),
+    rtree:create_ets(TreeName),
+    rtree:load_to_ets(Dsn, TreeName),
+    lists:foreach(
+        fun(R) -> io:format("~p~n", [R]) end,
+            ets:match_object(TreeName, '$1')),
+    {ok, Records} = rtree:load_to_list(Dsn),
+    {ok, Tree} = rtree:tree_from_records(Records),
+    %Res = rpc:call(RemoteNode, rtree_server, load, [TreeName]),
+    %io:format("~p~n",[Res]);
+    %io:format("Ets loaded ~p~n",[Table]);
+    Res = rtree:intersects(Tree,  1.0, -1.0),
+    io:format("Res ~p~n",[Res]);
 %%------------------------------------------------------------------------------
 %% @doc
 %% Run specific command 
@@ -376,3 +384,29 @@ run_command(intersects, Options, Args) ->
 node_name() ->
     Localhost = net_adm:localhost(),
     list_to_atom(?ESCRIPT ++ "@" ++ Localhost).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Setup and test connection to erlang cluster
+%%
+%% @spec connect(Options) -> RemoteNode::atom
+%% @end
+%%------------------------------------------------------------------------------
+connect(Options) ->
+    io:format("Connectting with options: ~p~n", [Options]),
+    NodeName = proplists:get_value(node_name, Options),
+    Cookie = proplists:get_value(cookie, Options),
+    RemoteNode = proplists:get_value(remote_node, Options),
+    net_kernel:start([NodeName, longnames]),
+    erlang:set_cookie(NodeName, Cookie),
+    case net_adm:ping(RemoteNode) of
+        pong ->
+            io:format("~s: ~s ~p~n", [?ESCRIPT, NodeName, pong]),
+            RemoteNode;
+        Else ->
+            io:format("~s: ~s ~p~n", [?ESCRIPT, NodeName, Else]),
+            halt(1)
+    end.
+
+
+
