@@ -20,7 +20,7 @@
 %%% @end
 %%%----------------------------------------------------------------
 -module(rtree_client).
--export([main/1]).
+-export([main/1, loop_for_files/0]).
 -mode(compile).
 
 -define(ESCRIPT, filename:basename(escript:script_name())).
@@ -76,7 +76,7 @@ command_create_usage() ->
 
 %%------------------------------------------------------------------------------
 %% @doc
-%% Command create load specific usage
+%% Command load parser specific usage
 %%
 %% @spec command_load_usage() -> ok
 %% @end
@@ -87,7 +87,7 @@ command_load_usage() ->
 
 %%------------------------------------------------------------------------------
 %% @doc
-%% Command create build specific usage
+%% Command build parser specific usage
 %%
 %% @spec command_build_usage() -> ok
 %% @end
@@ -98,7 +98,7 @@ command_build_usage() ->
 
 %%------------------------------------------------------------------------------
 %% @doc
-%% Command create intersects specific usage
+%% Command intersects parser specific usage
 %%
 %% @spec command_intersects_usage() -> ok
 %% @end
@@ -106,6 +106,18 @@ command_build_usage() ->
 command_intersects_usage() ->
     OptSpecList = command_intersects_option_spec_list(),
     getopt:usage(OptSpecList, "rtree_client intersects --").
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command doall parser specific usage
+%%
+%% @spec command_doall_usage() -> ok
+%% @end
+%%------------------------------------------------------------------------------
+command_doall_usage() ->
+    OptSpecList = command_doall_option_spec_list(),
+    getopt:usage(OptSpecList, "rtree_client doall --").
+
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -210,6 +222,25 @@ command_intersects_option_spec_list() ->
 
 %%------------------------------------------------------------------------------
 %% @doc
+%% Command doall specific option specification list
+%%
+%% @spec command_doall_option_spec_list() -> ok
+%% @end
+%%------------------------------------------------------------------------------
+command_doall_option_spec_list() ->
+    [
+     %% {Name, ShortOpt, LongOpt, ArgSpec, HelpMsg}
+     {help,         $h,         "help",         undefined,
+        "Show the program options"},
+     {dsn,    undefined,  undefined,      string,
+        "Data source name."},
+     {file,    undefined,  undefined,      string,
+        "File name with longitude,latitude values to intersect (.csv.gz)."}
+    ].
+
+
+%%------------------------------------------------------------------------------
+%% @doc
 %% Parse command line arguments
 %%
 %% @spec parse_args(RawArgs) -> {Options, Args}
@@ -254,6 +285,12 @@ parse_args(RawArgs) ->
                     {SubOptions, SubArgs} = command_parse_args(Args,
                         fun command_intersects_option_spec_list/0,
                         fun command_intersects_usage/0),
+                    MergedOptions = lists:append(Options, SubOptions),
+                    {MergedOptions, SubArgs};
+                doall->
+                    {SubOptions, SubArgs} = command_parse_args(Args,
+                        fun command_doall_option_spec_list/0,
+                        fun command_doall_usage/0),
                     MergedOptions = lists:append(Options, SubOptions),
                     {MergedOptions, SubArgs};
                 undefined ->
@@ -368,7 +405,26 @@ run_command(build, Options, Args) ->
 %% @end
 %%------------------------------------------------------------------------------
 run_command(intersects, Options, Args) ->
-    io:format("Run intersects: ~p~p~n", [Options, Args]).
+    io:format("Run intersects: ~p~p~n", [Options, Args]);
+%%------------------------------------------------------------------------------
+%% @doc
+%% Run specific command 
+%%
+%% @spec run_command(load, Options, Args) -> ok
+%% @end
+%%------------------------------------------------------------------------------
+run_command(doall, Options, Args) ->
+    io:format("Run doall: ~p~p~n", [Options, Args]),
+    Dsn = proplists:get_value(dsn, Options),
+    FilePath = filename:absname(proplists:get_value(file, Options)),
+    {ok, Records} = rtree:load_to_list(Dsn),
+    {ok, Tree} = rtree:tree_from_records(Records),
+    Res = rtree:intersects(Tree,  -1.0, 1.0),
+    io:format("Res ~p~n",[Res]),
+    register(consumer, spawn(?MODULE, loop_for_files, [])),
+    consume_file(FilePath, Tree),
+    consumer ! stop,
+    io:format("Done processing file: ~p~n",[FilePath]).
 
 %% ====================================================================
 %% Helper Functions
@@ -409,4 +465,70 @@ connect(Options) ->
     end.
 
 
+read_file(FilePath) ->
+    case file:open(FilePath, [raw,read,compressed]) of
+        {ok, Device} ->
+            L = csv:parse(csv:lazy(Device)),
+            {ok, L};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
+write_file(FilePath, L, Tree) ->
+    OutFilePath = string:join([FilePath, "out"], "."),
+    io:format("Saving new file: ~p~n", [OutFilePath]),
+    case file:open(OutFilePath, [raw,write,compressed]) of
+        {ok, Device} ->
+            lists:foreach(
+                fun(X) -> file:write(Device, string:join(X, ",")),
+                    [Longitude, Latitude] = X,
+                    io:format("Longitude: ~p~n", [list_to_float(Longitude)]),
+                    io:format("Latitude: ~p~n", [list_to_float(Latitude)]),
+                    {ok, Res} = rtree:intersects(Tree,
+                        list_to_float(Longitude),
+                        list_to_float(Latitude)),
+                    io:format("Response: ~p~n", [Res]),
+                    [Feature | Features] = Res,
+                    file:write(Device, element(6, Feature)),
+                    file:write(Device, "\n") end,
+                L),
+            {ok, OutFilePath};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+consume_file(FilePath, Tree) ->
+    io:format("File path to send: ~p~n", [FilePath]),
+    consumer ! {self(), {FilePath, Tree}},
+    receive
+      {Pid, Status, Msg} ->
+        io:format("~p~n",[{Pid, Status, Msg}])
+    end.
+
+recv_file(FilePath, Tree) ->
+    io:format("File path received: ~p~n", [FilePath]),
+    case read_file(FilePath) of
+        {ok, L} ->
+            case write_file(FilePath, L, Tree) of
+                {ok, OutFilePath} ->
+                    {ok, OutFilePath};
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+loop_for_files() ->
+    receive
+        {From, {FilePath, Tree}} ->
+            case recv_file(FilePath, Tree) of
+                {ok, OutFilePath} ->
+                    From ! {self(), ok, OutFilePath};
+                {error, Reason} ->
+                    From ! {self(), error, Reason}
+            end,
+            loop_for_files();
+        stop ->
+            true
+    end.

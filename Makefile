@@ -18,8 +18,9 @@ compile-release:
 release: compile-release
 	echo "Attach with: rel/rtree/bin/rtree attach"
 
-dialyzer_plt: ~/.dialyzer_plt
-	echo "dialyzer --build_plt --apps erts kernel stdlib mnesia syntax_tools"
+dialyzer_plt:
+	test ! -f ~/.dialyzer_plt && \
+        dialyzer --build_plt --apps erts kernel stdlib mnesia syntax_tools
 
 dialyzer-deps:
 	cd deps/erlgeom/ && make dialyzer-build && cd - 
