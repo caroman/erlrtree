@@ -20,7 +20,7 @@
 %%% @end
 %%%----------------------------------------------------------------
 -module(rtree_client).
--export([main/1, loop_for_files/0]).
+-export([main/1]).
 -mode(compile).
 
 -define(ESCRIPT, filename:basename(escript:script_name())).
@@ -234,8 +234,10 @@ command_doall_option_spec_list() ->
         "Show the program options"},
      {dsn,    undefined,  undefined,      string,
         "Data source name."},
-     {file,    undefined,  undefined,      string,
-        "File name with longitude,latitude values to intersect (.csv.gz)."}
+     {input_file,    undefined,  undefined,      string,
+        "Input file with longitude,latitude values to intersect (.csv.gz)."},
+     {output_file,    undefined,  undefined,      string,
+        "Output file with longitude,latitude values to intersect (.csv.gz)."}
     ].
 
 
@@ -414,18 +416,19 @@ run_command(intersects, Options, Args) ->
 %% @end
 %%------------------------------------------------------------------------------
 run_command(doall, Options, Args) ->
-    io:format("Run doall: ~p~p~n", [Options, Args]),
+    io:format("Running doall with: ~p~p~n", [Options, Args]),
     Dsn = proplists:get_value(dsn, Options),
-    FilePath = filename:absname(proplists:get_value(file, Options)),
-    {ok, Records} = rtree:load_to_list(Dsn),
-    {ok, Tree} = rtree:tree_from_records(Records),
-    Res = rtree:intersects(Tree,  -1.0, 1.0),
-    io:format("Res ~p~n",[Res]),
-    register(consumer, spawn(?MODULE, loop_for_files, [])),
-    consume_file(FilePath, Tree),
-    consumer ! stop,
-    io:format("Done processing file: ~p~n",[FilePath]).
-
+    ok = application:start(rtree),
+    rtree_server:create(local_tree),
+    rtree_server:load(local_tree, Dsn),
+    rtree_server:tree(local_tree),
+    InputFile = filename:absname(proplists:get_value(input_file, Options)),
+    OutputFile = filename:absname(proplists:get_value(output_file, Options)),
+    Pid = file_consumer:start(),
+    submit_file(Pid, local_tree, InputFile, OutputFile), 
+    Pid ! stop,
+    io:format("Done processing file: ~p~n",[InputFile]).
+ 
 %% ====================================================================
 %% Helper Functions
 %% ====================================================================
@@ -464,71 +467,22 @@ connect(Options) ->
             halt(1)
     end.
 
-
-read_file(FilePath) ->
-    case file:open(FilePath, [raw,read,compressed]) of
-        {ok, Device} ->
-            L = csv:parse(csv:lazy(Device)),
-            {ok, L};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-write_file(FilePath, L, Tree) ->
-    OutFilePath = string:join([FilePath, "out"], "."),
-    io:format("Saving new file: ~p~n", [OutFilePath]),
-    case file:open(OutFilePath, [raw,write,compressed]) of
-        {ok, Device} ->
-            lists:foreach(
-                fun(X) -> file:write(Device, string:join(X, ",")),
-                    [Longitude, Latitude] = X,
-                    io:format("Longitude: ~p~n", [list_to_float(Longitude)]),
-                    io:format("Latitude: ~p~n", [list_to_float(Latitude)]),
-                    {ok, Res} = rtree:intersects(Tree,
-                        list_to_float(Longitude),
-                        list_to_float(Latitude)),
-                    io:format("Response: ~p~n", [Res]),
-                    [Feature | Features] = Res,
-                    file:write(Device, element(6, Feature)),
-                    file:write(Device, "\n") end,
-                L),
-            {ok, OutFilePath};
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-consume_file(FilePath, Tree) ->
-    io:format("File path to send: ~p~n", [FilePath]),
-    consumer ! {self(), {FilePath, Tree}},
+%%------------------------------------------------------------------------------
+%% @doc
+%% Submit file to be processed by file consumer
+%%
+%% @spec submit_file(Pid, InputFile, OutputFile) -> ok
+%% where
+%%      Pid::ProcessId
+%%      InputFile::string
+%%      OutputFile::string
+%% @end
+%%------------------------------------------------------------------------------
+submit_file(Pid, Tree, InputFile, OutputFile) ->
+    io:format("FilePath to send: ~p~n", [InputFile]),
+    Pid ! {self(), {Tree, InputFile, OutputFile}},
     receive
       {Pid, Status, Msg} ->
         io:format("~p~n",[{Pid, Status, Msg}])
     end.
 
-recv_file(FilePath, Tree) ->
-    io:format("File path received: ~p~n", [FilePath]),
-    case read_file(FilePath) of
-        {ok, L} ->
-            case write_file(FilePath, L, Tree) of
-                {ok, OutFilePath} ->
-                    {ok, OutFilePath};
-                {error, Reason} ->
-                    {error, Reason}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-loop_for_files() ->
-    receive
-        {From, {FilePath, Tree}} ->
-            case recv_file(FilePath, Tree) of
-                {ok, OutFilePath} ->
-                    From ! {self(), ok, OutFilePath};
-                {error, Reason} ->
-                    From ! {self(), error, Reason}
-            end,
-            loop_for_files();
-        stop ->
-            true
-    end.

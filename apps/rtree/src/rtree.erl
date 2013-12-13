@@ -173,4 +173,3 @@ intersects(Tree, X, Y) ->
     InElements = [E || E <- Elements,
         erlgeom:intersects(element(3, E), Point) == true],
     {ok, InElements}.
-
