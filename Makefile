@@ -7,16 +7,22 @@ compile:
 compile-escriptize:
 	rebar compile escriptize
 
-escriptize: compile-escriptize
+mkdirs:
+	mkdir -p apps/rtree_client/lib/
+
+escriptize: mkdirs compile-escriptize
 	cp deps/erlgeom/priv/erlgeom.so apps/rtree_client/lib/
 	cp deps/erlogr/priv/erlogr.so apps/rtree_client/lib/
 	cp deps/erlosr/priv/erlosr.so apps/rtree_client/lib/
 
-compile-release:
-	./rebar compile release
+compile-generate:
+	test -f rel/files || cd rel && rebar create-node nodeid=rtree && cd -
+	rebar compile generate
 
-release: compile-release
+release: compile-generate
+	echo "Start with: rel/rtree/bin/rtree start"
 	echo "Attach with: rel/rtree/bin/rtree attach"
+	echo "Stop with: rel/rtree/bin/rtree stop"
 
 dialyzer_plt:
 	test ! -f ~/.dialyzer_plt && \
