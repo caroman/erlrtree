@@ -145,7 +145,7 @@ intersects(Name, X, Y) ->
 %% @end
 %%------------------------------------------------------------------------------
 load(Name, Dsn) ->
-    gen_server:call({global, Name}, {load, Dsn}).
+    gen_server:call({global, Name}, {load, Dsn}, infinity).
 
 %%------------------------------------------------------------------------------
 %% @doc
