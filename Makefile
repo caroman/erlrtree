@@ -20,9 +20,9 @@ compile-generate:
 	rebar compile generate
 
 release: compile-generate
-	echo "Start with: rel/rtree/bin/rtree start"
-	echo "Attach with: rel/rtree/bin/rtree attach"
-	echo "Stop with: rel/rtree/bin/rtree stop"
+	-echo "Start with: rel/rtree/bin/rtree start"
+	-echo "Attach with: rel/rtree/bin/rtree attach"
+	-echo "Stop with: rel/rtree/bin/rtree stop"
 
 dialyzer_plt:
 	test ! -f ~/.dialyzer_plt && \
