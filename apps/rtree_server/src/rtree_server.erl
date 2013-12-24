@@ -30,7 +30,7 @@
     create/1,
     create/2,
     stop/1,
-    tree/1,
+    build/1,
     intersects/3,
     load/2,
     status/1
@@ -113,13 +113,13 @@ stop(Name) ->
 %% @doc
 %% Server tree interface
 %%
-%% @spec tree(Name) -> {ok, Tree} | {error, Reason}
+%% @spec build(Name) -> {ok, Tree} | {error, Reason}
 %%  where
 %%      Name = term()
 %% @end
 %%------------------------------------------------------------------------------
-tree(Name) ->
-    gen_server:call({global, Name}, {tree}).
+build(Name) ->
+    gen_server:call({global, Name}, {build}).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -192,8 +192,8 @@ init([Name, Capacity]) ->
 %%     {stop, Reason, State}
 %% @end
 %%------------------------------------------------------------------------------
-handle_call({tree}, _From, State) ->
-    case rtree:tree_from_ets(State#state.table) of
+handle_call({build}, _From, State) ->
+    case rtree:build_tree_from_ets(State#state.table) of
         {ok, Tree} -> {reply, ok, State#state{tree=Tree}};
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
