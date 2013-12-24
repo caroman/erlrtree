@@ -90,7 +90,7 @@ start_link(Name, Capacity) ->
 %% @end
 %%------------------------------------------------------------------------------
 create(Name, Capacity) ->
-    rtree_sup:start_child(Name, Capacity).
+    rtree_server_sup:start_child(Name, Capacity).
 
 %% @spec create(Name) -> void()
 %% @equiv create(Name, DefaultCapacity)

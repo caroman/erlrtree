@@ -19,7 +19,7 @@
 %%% @copyright 2013 Carlos Roman
 %%% @end
 %%%----------------------------------------------------------------
--module(rtree_app).
+-module(rtree_server_app).
 
 -behaviour(application).
 
@@ -35,7 +35,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    rtree_sup:start_link().
+    rtree_server_sup:start_link().
 
 stop(_State) ->
     ok.
@@ -43,7 +43,7 @@ stop(_State) ->
 -ifdef(TEST).
 
 simple_test() ->
-    ok = application:start(rtree),
-    ?assertNot(undefined == whereis(rtree_sup)).
+    ok = application:start(rtree_server),
+    ?assertNot(undefined == whereis(rtree_server_sup)).
 
 -endif.

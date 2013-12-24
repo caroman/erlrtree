@@ -16,13 +16,13 @@ escriptize: mkdirs compile-escriptize
 	cp deps/erlosr/priv/erlosr.so apps/rtree_client/lib/
 
 compile-generate:
-	test -f rel/files || cd rel && rebar create-node nodeid=rtree && cd -
+	test -f rel/files || cd rel && rebar create-node nodeid=rtree_server && cd -
 	rebar compile generate
 
 release: compile-generate
-	echo "Start with: rel/rtree/bin/rtree start"
-	echo "Attach with: rel/rtree/bin/rtree attach"
-	echo "Stop with: rel/rtree/bin/rtree stop"
+	@echo "Start with: rel/rtree_server/bin/rtree_server start"
+	@echo "Attach with: rel/rtree_server/bin/rtree_server attach"
+	@echo "Stop with: rel/rtree_server/bin/rtree_server stop"
 
 dialyzer_plt:
 	test ! -f ~/.dialyzer_plt && \
@@ -52,7 +52,7 @@ dialyzer-clean:
 
 clean: dialyzer-clean
 	rebar clean
-	rm -f apps/rtree/priv/*
+	rm -f apps/rtree_server/priv/*
 	rm -f apps/rtree_client/priv/*
 	rm -f apps/rtree_client/lib/*
 	cd deps/erlgeom/ && make clean && cd - 

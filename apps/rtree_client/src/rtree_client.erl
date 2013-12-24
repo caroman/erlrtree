@@ -418,7 +418,7 @@ run_command(intersects, Options, Args) ->
 run_command(doall, Options, Args) ->
     io:format("Running doall with: ~p~p~n", [Options, Args]),
     Dsn = proplists:get_value(dsn, Options),
-    ok = application:start(rtree),
+    ok = application:start(rtree_server),
     rtree_server:create(local_tree),
     rtree_server:load(local_tree, Dsn),
     rtree_server:tree(local_tree),

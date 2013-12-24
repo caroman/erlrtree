@@ -19,7 +19,7 @@
 %% @copyright 2013 Carlos Roman
 %% @end
 %%----------------------------------------------------------------
--module(rtree_sup).
+-module(rtree_server_sup).
 
 -behaviour(supervisor).
 
