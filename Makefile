@@ -1,6 +1,9 @@
 
 all: release escriptize
 
+get-deps:
+	rebar get-deps
+
 compile:
 	rebar compile
 
