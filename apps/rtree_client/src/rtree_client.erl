@@ -24,6 +24,8 @@
 -mode(compile).
 
 -define(ESCRIPT, filename:basename(escript:script_name())).
+-compile([{parse_transform, lager_transform}]).
+
 
 %% ====================================================================
 %% Public API
@@ -38,12 +40,14 @@
 %%------------------------------------------------------------------------------
 main(Args) ->
     os:putenv("ESCRIPT", "1"),
+    lager:start(),
+    lager:set_loglevel(lager_console_backend, debug),
     case catch(run(Args)) of
         ok ->
             ok;
         Error ->
             %% Dump this error to console
-            io:format("Uncaught error processing args: ~p\n", [Error]),
+            lager:error("Uncaught error processing args: ~p", [Error]),
             halt(1)
     end.
 
@@ -217,7 +221,11 @@ command_intersects_option_spec_list() ->
      {help,         $h,         "help",         undefined,
         "Show the program options"},
      {tree_name,    undefined,  undefined,      atom,
-        "Tree name for rtree server (gen_server and ets)."}
+        "Tree name for rtree server (gen_server and ets)."},
+     {input_file,    undefined,  undefined,      string,
+        "Input file with longitude,latitude values to intersect (.csv.gz)."},
+     {output_file,    undefined,  undefined,      string,
+        "Output file with longitude,latitude values to intersect (.csv.gz)."}
     ].
 
 %%------------------------------------------------------------------------------
@@ -296,16 +304,16 @@ parse_args(RawArgs) ->
                     MergedOptions = lists:append(Options, SubOptions),
                     {MergedOptions, SubArgs};
                 undefined ->
-                    io:format("ERROR: missing argument <command>.~n"),
+                    lager:error("Missing argument <command>."),
                     usage(),
                     halt(1);
                 Other ->
-                    io:format("ERROR: wrong argument <command>: ~p~n", [Other]),
+                    lager:warning("Wrong argument <command>: ~p~n", [Other]),
                     usage(),
                     halt(1)
             end;
         {error, {Reason, Data}} ->
-            io:format("ERROR: ~s ~p~n~n", [Reason, Data]),
+            lager:error("~s ~p~n~n", [Reason, Data]),
             usage(),
             halt(1)
     end.
@@ -331,7 +339,7 @@ command_parse_args(ParserArgs, OptionSpecListFun, UsageFun) ->
                 false -> {Options, Args}
             end;
         {error, {Reason, Data}} ->
-            io:format("ERROR: ~s ~p~n~n", [Reason, Data]),
+            lager:error("~s ~p~n~n", [Reason, Data]),
             UsageFun(),
             halt(1)
     end.
@@ -359,12 +367,13 @@ run(RawArgs) ->
 %% @end
 %%------------------------------------------------------------------------------
 run_command(create, Options, _Args) ->
-    io:format("Run create: ~p~n", [Options]),
+    lager:debug("Run create: ~p~n", [Options]),
     RemoteNode = connect(Options),
-    io:format("Remote node: ~p~n", [RemoteNode]),
+    lager:debug("Remote node: ~p~n", [RemoteNode]),
     TreeName = proplists:get_value(tree_name, Options),
+    lager:debug("rtree_server:create(~p)~n", [TreeName]),
     Res = rpc:call(RemoteNode, rtree_server, create, [TreeName]),
-    io:format("~p~n",[Res]);
+    lager:debug("RTree server created: ~p~n",[Res]);
 %%------------------------------------------------------------------------------
 %% @doc
 %% Run specific command 
@@ -373,23 +382,16 @@ run_command(create, Options, _Args) ->
 %% @end
 %%------------------------------------------------------------------------------
 run_command(load, Options, Args) ->
-    io:format("Run load: ~p~p~n", [Options, Args]),
+    lager:debug("Run load: ~p~p~n", [Options, Args]),
     RemoteNode = connect(Options),
-    io:format("Remote node: ~p~n", [RemoteNode]),
+    lager:debug("Remote node: ~p~n", [RemoteNode]),
     TreeName = proplists:get_value(tree_name, Options),
     Dsn = proplists:get_value(dsn, Options),
-    rtree:create_ets(TreeName),
-    rtree:load_to_ets(Dsn, TreeName),
-    lists:foreach(
-        fun(R) -> io:format("~p~n", [R]) end,
-            ets:match_object(TreeName, '$1')),
-    {ok, Records} = rtree:load_to_list(Dsn),
-    {ok, Tree} = rtree:tree_from_records(Records),
-    %Res = rpc:call(RemoteNode, rtree_server, load, [TreeName]),
-    %io:format("~p~n",[Res]);
-    %io:format("Ets loaded ~p~n",[Table]);
-    Res = rtree:intersects(Tree,  1.0, -1.0),
-    io:format("Res ~p~n",[Res]);
+    Res = rpc:call(RemoteNode, rtree_server, load, [TreeName, Dsn]),
+    %{ok, Records} = rtree:load_to_list(Dsn),
+    %{ok, Tree} = rtree:tree_from_records(Records),
+    %lager:debug("~p~n",[Res]);
+    lager:debug("Res ~p~n",[Res]);
 %%------------------------------------------------------------------------------
 %% @doc
 %% Run specific command 
@@ -398,7 +400,15 @@ run_command(load, Options, Args) ->
 %% @end
 %%------------------------------------------------------------------------------
 run_command(build, Options, Args) ->
-    io:format("Run build: ~p~p~n", [Options, Args]);
+    lager:debug("Run build: ~p~p~n", [Options, Args]),
+    RemoteNode = connect(Options),
+    lager:debug("Remote node: ~p~n", [RemoteNode]),
+    TreeName = proplists:get_value(tree_name, Options),
+    Res = rpc:call(RemoteNode, rtree_server, tree, [TreeName]),
+    %{ok, Records} = rtree:load_to_list(Dsn),
+    %{ok, Tree} = rtree:tree_from_records(Records),
+    %lager:debug("~p~n",[Res]);
+    lager:debug("Res ~p~n",[Res]);
 %%------------------------------------------------------------------------------
 %% @doc
 %% Run specific command 
@@ -407,7 +417,16 @@ run_command(build, Options, Args) ->
 %% @end
 %%------------------------------------------------------------------------------
 run_command(intersects, Options, Args) ->
-    io:format("Run intersects: ~p~p~n", [Options, Args]);
+    lager:debug("Run intersects: ~p~p~n", [Options, Args]),
+    TreeName = proplists:get_value(tree_name, Options),
+    InputFile = filename:absname(proplists:get_value(input_file, Options)),
+    OutputFile = filename:absname(proplists:get_value(output_file, Options)),
+    RemoteNode = connect(Options),
+    Pid = file_consumer:start_remote(),
+    submit_file(Pid, RemoteNode, TreeName, InputFile, OutputFile),
+    Pid ! stop,
+    lager:debug("Done processing file: ~p~n",[InputFile]);
+ 
 %%------------------------------------------------------------------------------
 %% @doc
 %% Run specific command 
@@ -416,7 +435,7 @@ run_command(intersects, Options, Args) ->
 %% @end
 %%------------------------------------------------------------------------------
 run_command(doall, Options, Args) ->
-    io:format("Running doall with: ~p~p~n", [Options, Args]),
+    lager:debug("Running doall with: ~p~p~n", [Options, Args]),
     Dsn = proplists:get_value(dsn, Options),
     ok = application:start(rtree),
     rtree_server:create(local_tree),
@@ -427,7 +446,7 @@ run_command(doall, Options, Args) ->
     Pid = file_consumer:start(),
     submit_file(Pid, local_tree, InputFile, OutputFile), 
     Pid ! stop,
-    io:format("Done processing file: ~p~n",[InputFile]).
+    lager:debug("Done processing file: ~p~n",[InputFile]).
  
 %% ====================================================================
 %% Helper Functions
@@ -452,7 +471,7 @@ node_name() ->
 %% @end
 %%------------------------------------------------------------------------------
 connect(Options) ->
-    io:format("Connectting with options: ~p~n", [Options]),
+    lager:debug("Connecting with options: ~p~n", [Options]),
     NodeName = proplists:get_value(node_name, Options),
     Cookie = proplists:get_value(cookie, Options),
     RemoteNode = proplists:get_value(remote_node, Options),
@@ -460,10 +479,11 @@ connect(Options) ->
     erlang:set_cookie(NodeName, Cookie),
     case net_adm:ping(RemoteNode) of
         pong ->
-            io:format("~s: ~s ~p~n", [?ESCRIPT, NodeName, pong]),
+            lager:debug("~s: ~s ~p~n", [?ESCRIPT, NodeName, pong]),
+            %net_kernel:connect_node(RemoteNode),
             RemoteNode;
         Else ->
-            io:format("~s: ~s ~p~n", [?ESCRIPT, NodeName, Else]),
+            lager:debug("~s: ~s ~p~n", [?ESCRIPT, NodeName, Else]),
             halt(1)
     end.
 
@@ -479,10 +499,18 @@ connect(Options) ->
 %% @end
 %%------------------------------------------------------------------------------
 submit_file(Pid, Tree, InputFile, OutputFile) ->
-    io:format("FilePath to send: ~p~n", [InputFile]),
+    lager:debug("FilePath to send: ~p~n", [InputFile]),
     Pid ! {self(), {Tree, InputFile, OutputFile}},
     receive
       {Pid, Status, Msg} ->
-        io:format("~p~n",[{Pid, Status, Msg}])
+        lager:debug("~p~n",[{Pid, Status, Msg}])
+    end.
+
+submit_file(Pid, RemoteNode, Tree, InputFile, OutputFile) ->
+    lager:debug("FilePath to send: ~p~n", [InputFile]),
+    Pid ! {self(), {RemoteNode, Tree, InputFile, OutputFile}},
+    receive
+      {Pid, Status, Msg} ->
+        lager:debug("~p~n",[{Pid, Status, Msg}])
     end.
 
