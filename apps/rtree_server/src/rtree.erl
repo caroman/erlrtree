@@ -27,8 +27,8 @@
     create_ets/1,
     load_to_ets/2,
     load_to_list/1,
-    tree_from_ets/1,
-    tree_from_records/1,
+    build_tree_from_ets/1,
+    build_tree_from_records/1,
     intersects/3
     ]).
 
@@ -107,11 +107,11 @@ tree_insert_record(Tree, WkbReader, Record) ->
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Create STRtree from rtree ETS
-%%% @spec tree_from_records(Records)
+%%% @spec build_tree_from_records(Records)
 %%%     -> {atom(ok), Tree} | {atom(error), Reason::string()}
 %%% @end
 %%% ----------------------------------------------------------------------------
-tree_from_records(Records) ->
+build_tree_from_records(Records) ->
     Size = length(Records),
     case Size of
         Size when Size > 0  ->
@@ -129,11 +129,11 @@ tree_from_records(Records) ->
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Create STRtree from rtree ETS
-%%% @spec tree_from_ets(Table) 
+%%% @spec build_tree_from_ets(Table) 
 %%%     -> atom(ok) | {atom(error), Reason::string()}
 %%% @end
 %%% ----------------------------------------------------------------------------
-tree_from_ets(Table) ->
+build_tree_from_ets(Table) ->
     case ets:info(Table, size) of
         Size when Size > 0  ->
             Tree = erlgeom:geosstrtree_create(),
