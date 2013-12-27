@@ -61,3 +61,5 @@ clean: dialyzer-clean
 	cd deps/erlgeom/ && make clean && cd - 
 	cd deps/erlogr/ && make clean && cd -
 	cd deps/erlosr/ && make clean && cd -
+	rm -rf rel/files
+	rm -rf rel/rtree_server
