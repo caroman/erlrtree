@@ -28,30 +28,35 @@ release: compile-generate
 	@echo "Stop with: rel/rtree_server/bin/rtree_server stop"
 
 dialyzer_plt:
-	test ! -f ~/.dialyzer_plt && \
+	-test ! -f ~/.dialyzer_plt && \
         dialyzer --build_plt --apps erts kernel stdlib mnesia syntax_tools
 
-dialyzer-deps:
-	cd deps/erlgeom/ && make dialyzer-build && cd - 
-	cd deps/erlogr/ && make dialyzer-build && cd -
-	cd deps/erlosr/ && make dialyzer-build && cd -
+dialyzer-deps: compile dialyzer_plt
+	-test ! -f deps/deps.plt && \
+		pushd deps && \
+		dialyzer --build_plt --output_plt deps.plt \
+		--plts ~/.dialyzer_plt \
+    	-o dialyzer-deps.build \
+    	--apps erlgeom erlogr erlosr lager goldrush poolboy && \
+		popd
 
-dialyzer-build: compile dialyzer-deps
-	dialyzer --build_plt --output_plt erlrtree.plt \
-        -o dialyzer.build \
-        -r apps/
+dialyzer-apps: dialyzer-deps
+	pushd apps && \
+	dialyzer --build_plt --output_plt apps.plt \
+	    --plts ~/.dialyzer_plt ../deps/deps.plt \
+        -o dialyzer-apps.build \
+        --apps rtree_server rtree_client && \
+	popd
 
-dialyzer: dialyzer_plt dialyzer-build
+dialyzer: dialyzer-apps
+	pushd apps && \
 	dialyzer \
-        --plts ~/.dialyzer_plt \
-            deps/erlgeom/erlgeom.plt \
-            deps/erlogr/erlogr.plt \
-            deps/erlosr/erlosr.plt \
-            erlrtree.plt \
-        -r apps/
+        --plts ~/.dialyzer_plt ../deps/deps.plt apps.plt \
+		--apps rtree_client rtree_server && \
+	popd
 
 dialyzer-clean:
-	rm -f erlrtree.plt
+	rm -f *.plt
 
 clean: dialyzer-clean
 	rebar clean
