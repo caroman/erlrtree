@@ -35,7 +35,8 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    rtree_server_sup:start_link().
+    rtree_server_sup:start_link(),
+    rtree_worker_sup:start_link().
 
 stop(_State) ->
     ok.

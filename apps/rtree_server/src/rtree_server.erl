@@ -32,6 +32,7 @@
     stop/1,
     build/1,
     intersects/3,
+    pintersects/3,
     load/2,
     status/1
     ]).
@@ -136,6 +137,20 @@ intersects(Name, X, Y) ->
 
 %%------------------------------------------------------------------------------
 %% @doc
+%% Server intersects interface
+%%
+%% @spec pintersects(Name, X, Y) -> {ok, bool()} | {error, Reason}
+%%  where
+%%      X = float()
+%%      Y = float()
+%% @end
+%%------------------------------------------------------------------------------
+pintersects(Name, X, Y) ->
+    gen_server:call({global, Name}, {pintersects, X, Y}).
+
+
+%%------------------------------------------------------------------------------
+%% @doc
 %% Server load interface
 %%
 %% @spec load(Name, Dsn) -> {ok, Bool} | {error, Reason}
@@ -209,6 +224,17 @@ handle_call({intersects, X, Y}, _, State) ->
                 %{error, Reason} -> {reply, {error, Reason},
                 %    State#state{error_count=State#state.error_count + 1}}
             end
+    end;
+handle_call({pintersects, X, Y}, _, #state{tree=Tree}=State) ->
+    if 
+        Tree == undefined ->
+            {reply, {error, "Tree not populated yet"}, State};
+
+        true ->
+            poolboy:transaction(rtree_worker_pool,
+                fun(Worker) ->
+                    gen_server:call(Worker, {intersects, Tree, X, Y})
+                end)
     end;
 handle_call({load, Dsn}, _From, State) ->
     Table = State#state.table,
