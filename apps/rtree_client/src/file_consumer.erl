@@ -70,7 +70,7 @@ write_file(OutputFile, Lines, ResultIds) ->
                 fun({Line, Id}) ->
                     file:write(Device, string:join(Line, ",")),
                     file:write(Device, ","),
-                    file:write(Device, Id),
+                    file:write(Device, integer_to_list(Id)),
                     file:write(Device, "\n")
                 end,
                 lists:zip(Content, ResultIds)),
@@ -98,11 +98,11 @@ extract_points(Lines, PosXString, PosYString) ->
     end.
 query_tree(Tree, Points) ->
     Ids = lists:map(fun({X, Y}) ->
-            {ok, InElements} = rtree_server:intersects(Tree, X, Y),
+            {ok, InElements} = rtree_server:pintersects(Tree, X, Y),
             Size = length(InElements),
             case Size of
                 Size when Size > 0  ->
-                    element(9, lists:last(InElements));
+                    element(5, lists:last(InElements));
                 Size when Size == 0 ->
                     0
             end 
@@ -117,7 +117,7 @@ query_tree_remote(RemoteNode, Tree, Points) ->
             Size = length(InElements),
             case Size of
                 Size when Size > 0  ->
-                    element(9, lists:last(InElements));
+                    element(5, lists:last(InElements));
                 Size when Size == 0 ->
                     0
             end 
