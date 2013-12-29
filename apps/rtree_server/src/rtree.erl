@@ -218,9 +218,9 @@ file_read(FilePath) ->
             {error, Reason}
     end.
 
-file_write(OutputPath, Lines, ResultIds) ->
-    io:format("Saving file: ~p~n", [OutputPath]),
-    case file:open(OutputPath, [raw,write,compressed]) of
+file_write(OutputFilename, Lines, ResultIds) ->
+    io:format("Saving file: ~p~n", [OutputFilename]),
+    case file:open(OutputFilename, [raw,write,compressed]) of
         {ok, Device} ->
             [Header | Content] = Lines,
             file:write(Device, string:join(Header, ",")),
@@ -241,12 +241,18 @@ file_write(OutputPath, Lines, ResultIds) ->
 
 intersects_file(Tree, InputPath, OutputPath) ->
     io:format("File received: ~p~n", [InputPath]),
+    OutputFilename = case filelib:is_dir(OutputPath) of
+        true ->
+            filename:join(OutputPath, filename:basename(InputPath));
+        false ->
+            OutputPath
+    end,
     case file_read(InputPath) of
         {ok, Lines} ->
             case lines_extract_points(Lines, "longitude", "latitude") of
                 {ok, Points} ->
                     ResultIds = tree_query_points(Tree, Points),
-                    file_write(OutputPath, Lines, ResultIds);
+                    file_write(OutputFilename, Lines, ResultIds);
                 {error, Reason} ->
                     {error, Reason}
             end;
