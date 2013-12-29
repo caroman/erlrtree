@@ -48,7 +48,7 @@ main(Args) ->
         Error ->
             %% Dump this error to console
             lager:error("Uncaught error processing args: ~p", [Error]),
-            halt(1)
+            delayed_halt(1)
     end.
 
 %% ====================================================================
@@ -267,7 +267,7 @@ parse_args(RawArgs) ->
                 Options) of
                 true ->
                     usage(),
-                    halt(1);
+                    delayed_halt(1);
                 false -> false
             end,
             %% SubArgs contains Args, if appending is done then values
@@ -307,16 +307,16 @@ parse_args(RawArgs) ->
                 undefined ->
                     lager:error("Missing argument <command>."),
                     usage(),
-                    halt(1);
+                    delayed_halt(1);
                 Other ->
                     lager:warning("Wrong argument <command>: ~p~n", [Other]),
                     usage(),
-                    halt(1)
+                    delayed_halt(1)
             end;
         {error, {Reason, Data}} ->
             lager:error("~s ~p~n~n", [Reason, Data]),
             usage(),
-            halt(1)
+            delayed_halt(1)
     end.
 
 %%------------------------------------------------------------------------------
@@ -336,13 +336,13 @@ command_parse_args(ParserArgs, OptionSpecListFun, UsageFun) ->
                 Options) of
                 true ->
                     UsageFun(),
-                    halt(1);
+                    delayed_halt(1);
                 false -> {Options, Args}
             end;
         {error, {Reason, Data}} ->
             lager:error("~s ~p~n~n", [Reason, Data]),
             UsageFun(),
-            halt(1)
+            delayed_halt(1)
     end.
 
 %% ====================================================================
@@ -418,15 +418,15 @@ run_command(build, Options, Args) ->
 %% @end
 %%------------------------------------------------------------------------------
 run_command(intersects, Options, Args) ->
-    lager:debug("Run intersects: ~p~p~n", [Options, Args]),
+    lager:debug("Run intersects: Options:~p Args:~p~n", [Options, Args]),
     TreeName = proplists:get_value(tree_name, Options),
-    InputFile = filename:absname(proplists:get_value(input_file, Options)),
-    OutputFile = filename:absname(proplists:get_value(output_file, Options)),
+    InputPath = filename:absname(proplists:get_value(input_file, Options)),
+    OutputPath = filename:absname(proplists:get_value(output_file, Options)),
     RemoteNode = connect(Options),
-    Pid = file_consumer:start_remote(),
-    submit_file(Pid, RemoteNode, TreeName, InputFile, OutputFile),
-    Pid ! stop,
-    lager:debug("Done processing file: ~p~n",[InputFile]);
+    Res = rpc:call(RemoteNode, rtree_server, intersects_file,
+        [TreeName, InputPath, OutputPath]),
+    lager:debug("Response: ~p", [Res]),
+    delayed_halt(0);
  
 %%------------------------------------------------------------------------------
 %% @doc
@@ -442,12 +442,12 @@ run_command(doall, Options, Args) ->
     rtree_server:create(local_tree),
     rtree_server:load(local_tree, Dsn),
     rtree_server:build(local_tree),
-    InputFile = filename:absname(proplists:get_value(input_file, Options)),
-    OutputFile = filename:absname(proplists:get_value(output_file, Options)),
-    Pid = file_consumer:start(),
-    submit_file(Pid, local_tree, InputFile, OutputFile), 
-    Pid ! stop,
-    lager:debug("Done processing file: ~p~n",[InputFile]).
+    InputPath = filename:absname(proplists:get_value(input_file, Options)),
+    OutputPath = filename:absname(proplists:get_value(output_file, Options)),
+    Res = rtree_server:intersects_file(local_tree, InputPath, OutputPath),
+    %lager:debug("Response: ~p", [Res]),
+    io:format("Response: ~p~n", [Res]),
+    delayed_halt(0).
  
 %% ====================================================================
 %% Helper Functions
@@ -485,33 +485,31 @@ connect(Options) ->
             RemoteNode;
         Else ->
             lager:debug("~s: ~s ~p~n", [?ESCRIPT, NodeName, Else]),
-            halt(1)
+            delayed_halt(1)
     end.
 
 %%------------------------------------------------------------------------------
 %% @doc
-%% Submit file to be processed by file consumer
+%% From rebar_utils.erl
+%% Work around buffer flushing issue in erlang:halt if OTP older than R15B01.
+%% TODO: remove workaround once we require R15B01 or newer R15B01 introduced
+%% erlang:halt/2
 %%
-%% @spec submit_file(Pid, InputFile, OutputFile) -> ok
-%% where
-%%      Pid::ProcessId
-%%      InputFile::string
-%%      OutputFile::string
+%% @spec delayed_halt(integer()) -> no_return()
 %% @end
 %%------------------------------------------------------------------------------
-submit_file(Pid, Tree, InputFile, OutputFile) ->
-    lager:debug("FilePath to send: ~p~n", [InputFile]),
-    Pid ! {self(), {Tree, InputFile, OutputFile}},
-    receive
-      {Pid, Status, Msg} ->
-        lager:debug("~p~n",[{Pid, Status, Msg}])
+delayed_halt(Code) ->
+    case erlang:is_builtin(erlang, halt, 2) of
+        true ->
+            halt(Code);
+        false ->
+            case os:type() of
+                {win32, nt} ->
+                    timer:sleep(100),
+                    halt(Code);
+                _ ->
+                    halt(Code),
+                    %% workaround to delay exit until all output is written
+                    receive after infinity -> ok end
+            end
     end.
-
-submit_file(Pid, RemoteNode, Tree, InputFile, OutputFile) ->
-    lager:debug("FilePath to send: ~p~n", [InputFile]),
-    Pid ! {self(), {RemoteNode, Tree, InputFile, OutputFile}},
-    receive
-      {Pid, Status, Msg} ->
-        lager:debug("~p~n",[{Pid, Status, Msg}])
-    end.
-

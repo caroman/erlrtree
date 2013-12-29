@@ -29,7 +29,8 @@
     load_to_list/1,
     build_tree_from_ets/1,
     build_tree_from_records/1,
-    intersects/3
+    intersects/3,
+    intersects_file/3
     ]).
 
 %%% ----------------------------------------------------------------------------
@@ -39,7 +40,7 @@
 %%% @end
 %%% ----------------------------------------------------------------------------
 create_ets(Table) ->
-    io:format("Table ~p~n",[Table]),
+    io:format("Table: ~p~n",[Table]),
     case ets:info(Table) of
         undefined -> ets:new(Table, [set, public, named_table,
             {keypos, 5}, %% first 4 values are header,srid,geos,wkb
@@ -173,3 +174,82 @@ intersects(Tree, X, Y) ->
     InElements = [E || E <- Elements,
         erlgeom:intersects(element(3, E), Point) == true],
     {ok, InElements}.
+
+
+%% =============================================================================
+%%  File related functions
+%% =============================================================================
+tree_query_points(Tree, Points) ->
+    Ids = lists:map(fun({X, Y}) ->
+            {ok, InElements} = rtree:intersects(Tree, X, Y),
+            Size = length(InElements),
+            case Size of
+                Size when Size > 0  ->
+                    element(5, lists:last(InElements));
+                Size when Size == 0 ->
+                    0
+            end 
+        end,
+        Points),
+    Ids.
+
+lines_extract_points(Lines, PosXString, PosYString) ->
+    [Header | Content] = Lines,
+    PosXIndex = string:str(Header, [PosXString]),
+    PosYIndex = string:str(Header, [PosYString]),
+    if
+        PosXIndex == 0 ->
+            {error, "Missing longitude field in input file"};
+        PosYIndex == 0 ->
+            {error, "Missing latitude field in input file"};
+        true ->
+            Points = [{list_to_float(lists:nth(PosXIndex, Line)),
+                       list_to_float(lists:nth(PosYIndex, Line))} 
+                       || Line <- Content],
+            {ok, Points}
+    end.
+
+file_read(FilePath) ->
+    case file:open(FilePath, [raw,read,compressed]) of
+        {ok, Device} -> 
+            L = csv:parse(csv:lazy(Device)),
+            {ok, L};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+file_write(OutputPath, Lines, ResultIds) ->
+    io:format("Saving file: ~p~n", [OutputPath]),
+    case file:open(OutputPath, [raw,write,compressed]) of
+        {ok, Device} ->
+            [Header | Content] = Lines,
+            file:write(Device, string:join(Header, ",")),
+            file:write(Device, ",id\n"),
+            lists:map(
+                fun({Line, Id}) ->
+                    file:write(Device, string:join(Line, ",")),
+                    file:write(Device, ","),
+                    file:write(Device, integer_to_list(Id)),
+                    file:write(Device, "\n")
+                end,
+                lists:zip(Content, ResultIds)),
+            file:close(Device),
+            ok;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+intersects_file(Tree, InputPath, OutputPath) ->
+    io:format("File received: ~p~n", [InputPath]),
+    case file_read(InputPath) of
+        {ok, Lines} ->
+            case lines_extract_points(Lines, "longitude", "latitude") of
+                {ok, Points} ->
+                    ResultIds = tree_query_points(Tree, Points),
+                    file_write(OutputPath, Lines, ResultIds);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} -> 
+            {error, Reason}
+    end.

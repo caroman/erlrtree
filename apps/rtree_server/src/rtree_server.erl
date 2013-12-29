@@ -32,6 +32,7 @@
     stop/1,
     build/1,
     intersects/3,
+    intersects_file/3,
     pintersects/3,
     load/2,
     status/1
@@ -139,6 +140,20 @@ intersects(Name, X, Y) ->
 %% @doc
 %% Server intersects interface
 %%
+%% @spec intersects_file(Name, InputPath, OutputPath) ->
+%%      {ok, bool()} | {error, Reason}
+%%  where
+%%      InputPath = string()
+%%      OutputPath = string()
+%% @end
+%%------------------------------------------------------------------------------
+intersects_file(Name, InputPath, OutputPath) ->
+    gen_server:call({global, Name}, {intersects_file, InputPath, OutputPath}).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server intersects interface
+%%
 %% @spec pintersects(Name, X, Y) -> {ok, bool()} | {error, Reason}
 %%  where
 %%      X = float()
@@ -223,6 +238,22 @@ handle_call({intersects, X, Y}, _, State) ->
                     State#state{ok_count=State#state.ok_count + 1}}
                 %{error, Reason} -> {reply, {error, Reason},
                 %    State#state{error_count=State#state.error_count + 1}}
+            end
+    end;
+handle_call({intersects_file, InputPath, OutputPath}, _, State) ->
+    if 
+        State#state.tree == undefined ->
+            {reply, {error, "Tree not populated yet"}, State};
+
+        true ->
+            io:format("XXX: ~p~n", [true]),
+            case rtree:intersects_file(State#state.tree, InputPath, OutputPath) of
+                ok ->
+                    {reply, {ok, InputPath},
+                        State#state{ok_count=State#state.ok_count + 1}};
+                {error, Reason} ->
+                    {reply, {error, Reason},
+                        State#state{error_count=State#state.error_count + 1}}
             end
     end;
 handle_call({pintersects, X, Y}, _, #state{tree=Tree}=State) ->
