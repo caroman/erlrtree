@@ -106,6 +106,22 @@ handle_call({intersects, Tree, X, Y}, _, State) ->
                 %{error, Reason} -> {reply, {error, Reason},
                 %    State#state{error_count=State#state.error_count + 1}}
             end
+    end;
+handle_call({intersects_file, Tree, InputPath, OutputPath}, _, State) ->
+    if 
+        Tree == undefined ->
+            {reply, {error, "Tree not populated yet"}, State};
+
+        true ->
+            io:format("XXX: ~p~n", [true]),
+            case rtree:intersects_file(Tree, InputPath, OutputPath) of
+                ok ->
+                    {reply, {ok, InputPath},
+                        State#state{ok_count=State#state.ok_count + 1}};
+                {error, Reason} ->
+                    {reply, {error, Reason},
+                        State#state{error_count=State#state.error_count + 1}}
+            end
     end.
 
 %%------------------------------------------------------------------------------

@@ -423,9 +423,14 @@ run_command(intersects, Options, Args) ->
     InputPath = filename:absname(proplists:get_value(input_file, Options)),
     OutputPath = filename:absname(proplists:get_value(output_file, Options)),
     RemoteNode = connect(Options),
-    Res = rpc:call(RemoteNode, rtree_server, intersects_file,
-        [TreeName, InputPath, OutputPath]),
+    Res = rpc:call(RemoteNode, rtree_server, pintersects_file,
+        [TreeName, InputPath, OutputPath, self()]),
     lager:debug("Response: ~p", [Res]),
+    io:format("Response: ~p~n", [Res]),
+    receive
+        {ok, InputFile} -> io:format("Done: ~p~n", [InputFile]);
+        Other -> io:format("Done: ~p~n", [Other])
+    end,
     delayed_halt(0);
  
 %%------------------------------------------------------------------------------

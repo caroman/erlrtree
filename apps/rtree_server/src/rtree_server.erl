@@ -33,7 +33,7 @@
     build/1,
     intersects/3,
     intersects_file/3,
-    pintersects/3,
+    pintersects_file/4,
     load/2,
     status/1
     ]).
@@ -141,7 +141,7 @@ intersects(Name, X, Y) ->
 %% Server intersects interface
 %%
 %% @spec intersects_file(Name, InputPath, OutputPath) ->
-%%      {ok, bool()} | {error, Reason}
+%%      {ok, InputPath} | {error, Reason}
 %%  where
 %%      InputPath = string()
 %%      OutputPath = string()
@@ -154,15 +154,15 @@ intersects_file(Name, InputPath, OutputPath) ->
 %% @doc
 %% Server intersects interface
 %%
-%% @spec pintersects(Name, X, Y) -> {ok, bool()} | {error, Reason}
+%% @spec pintersects_file(Name, InputPath, OutputPath) ->
+%%      {ok, InputPath} | {error, Reason}
 %%  where
-%%      X = float()
-%%      Y = float()
+%%      InputPath = string()
+%%      OutputPath = string()
 %% @end
 %%------------------------------------------------------------------------------
-pintersects(Name, X, Y) ->
-    gen_server:call({global, Name}, {pintersects, X, Y}).
-
+pintersects_file(Name, InputPath, OutputPath, From) ->
+    gen_server:cast({global, Name}, {pintersects_file, InputPath, OutputPath, From}).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -256,20 +256,6 @@ handle_call({intersects_file, InputPath, OutputPath}, _, State) ->
                         State#state{error_count=State#state.error_count + 1}}
             end
     end;
-handle_call({pintersects, X, Y}, _, #state{tree=Tree}=State) ->
-    if 
-        Tree == undefined ->
-            {reply, {error, "Tree not populated yet"}, State};
-
-        true ->
-            case poolboy:transaction(rtree_worker_pool, fun(Worker) ->
-                gen_server:call(Worker, {intersects, Tree, X, Y}) end) of
-                    {ok, Geoms} -> {reply, {ok, Geoms},
-                        State#state{ok_count=State#state.ok_count + 1}}
-                %{error, Reason} -> {reply, {error, Reason},
-                %    State#state{error_count=State#state.error_count + 1}}
-            end
-    end;
 handle_call({load, Dsn}, _From, State) ->
     Table = State#state.table,
     case rtree:load_to_ets(Dsn, Table) of
@@ -289,6 +275,25 @@ handle_call({status}, _From, State) ->
 %%     {noreply, State} | {stop, Reason, State}
 %% @end
 %%------------------------------------------------------------------------------
+handle_cast({pintersects_file, InputPath, OutputPath, From}, #state{tree=Tree}=State) ->
+    if 
+        Tree == undefined ->
+            io:format("Tree not populated yet~n"),
+            {noreply, State#state{error_count=State#state.error_count + 1}};
+        true ->
+            io:format("Call rtree_worker_pool for file:~p~n", [InputPath]),
+            case poolboy:transaction(rtree_worker_pool, fun(Worker) ->
+                gen_server:call(Worker, {intersects_file, Tree, InputPath, OutputPath}) end) of
+                    {ok, InputFile} ->
+                        io:format("{ok, ~p}~n", [InputFile]),
+                        io:format("Process ~p~n", [From]),
+                        From ! {ok, InputFile},
+                        {noreply, State#state{ok_count=State#state.ok_count + 1}};
+                    {error, Reason} ->
+                        io:format("{error, ~p, ~p}~n", [InputPath, Reason]),
+                        {noreply, State#state{error_count=State#state.error_count + 1}}
+            end
+    end;
 handle_cast(stop, State) ->
     io:format("Cast: ~p~n", [State]),
     {stop, normal, State};
