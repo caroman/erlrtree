@@ -231,10 +231,13 @@ handle_call({pintersects, X, Y}, _, #state{tree=Tree}=State) ->
             {reply, {error, "Tree not populated yet"}, State};
 
         true ->
-            poolboy:transaction(rtree_worker_pool,
-                fun(Worker) ->
-                    gen_server:call(Worker, {intersects, Tree, X, Y})
-                end)
+            case poolboy:transaction(rtree_worker_pool, fun(Worker) ->
+                gen_server:call(Worker, {intersects, Tree, X, Y}) end) of
+                    {ok, Geoms} -> {reply, {ok, Geoms},
+                        State#state{ok_count=State#state.ok_count + 1}}
+                %{error, Reason} -> {reply, {error, Reason},
+                %    State#state{error_count=State#state.error_count + 1}}
+            end
     end;
 handle_call({load, Dsn}, _From, State) ->
     Table = State#state.table,

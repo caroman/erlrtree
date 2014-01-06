@@ -33,30 +33,31 @@ dialyzer_plt:
 
 dialyzer-deps: compile dialyzer_plt
 	-test ! -f deps/deps.plt && \
-		pushd deps && \
+		cd deps && \
 		dialyzer --build_plt --output_plt deps.plt \
 		--plts ~/.dialyzer_plt \
     	-o dialyzer-deps.build \
     	--apps erlgeom erlogr erlosr lager goldrush poolboy && \
-		popd
+		cd -
 
 dialyzer-apps: dialyzer-deps
-	pushd apps && \
+	cd apps && \
 	dialyzer --build_plt --output_plt apps.plt \
 	    --plts ~/.dialyzer_plt ../deps/deps.plt \
         -o dialyzer-apps.build \
         --apps rtree_server rtree_client && \
-	popd
+	cd -
 
 dialyzer: dialyzer-apps
-	pushd apps && \
+	cd apps && \
 	dialyzer \
         --plts ~/.dialyzer_plt ../deps/deps.plt apps.plt \
 		--apps rtree_client rtree_server && \
-	popd
+	cd -
 
 dialyzer-clean:
-	rm -f *.plt
+	rm -f deps/deps.plt
+	rm -f apps/apps.plt
 
 clean: dialyzer-clean
 	rebar clean
