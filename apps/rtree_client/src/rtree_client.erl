@@ -441,7 +441,7 @@ run_command(doall, Options, Args) ->
     ok = application:start(rtree_server),
     rtree_server:create(local_tree),
     rtree_server:load(local_tree, Dsn),
-    rtree_server:tree(local_tree),
+    rtree_server:build(local_tree),
     InputFile = filename:absname(proplists:get_value(input_file, Options)),
     OutputFile = filename:absname(proplists:get_value(output_file, Options)),
     Pid = file_consumer:start(),
