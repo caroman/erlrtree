@@ -374,7 +374,8 @@ run_command(create, Options, _Args) ->
     TreeName = proplists:get_value(tree_name, Options),
     lager:debug("rtree_server:create(~p)~n", [TreeName]),
     Res = rpc:call(RemoteNode, rtree_server, create, [TreeName]),
-    lager:debug("RTree server created: ~p~n",[Res]);
+    lager:info("Response: ~p~n",[Res]),
+    delayed_halt(0);
 %%------------------------------------------------------------------------------
 %% @doc
 %% Run specific command 
@@ -392,7 +393,8 @@ run_command(load, Options, Args) ->
     %{ok, Records} = rtree:load_to_list(Dsn),
     %{ok, Tree} = rtree:tree_from_records(Records),
     %lager:debug("~p~n",[Res]);
-    lager:debug("Res ~p~n",[Res]);
+    lager:info("Response ~p~n",[Res]),
+    delayed_halt(0);
 %%------------------------------------------------------------------------------
 %% @doc
 %% Run specific command 
@@ -409,7 +411,8 @@ run_command(build, Options, Args) ->
     %{ok, Records} = rtree:load_to_list(Dsn),
     %{ok, Tree} = rtree:tree_from_records(Records),
     %lager:debug("~p~n",[Res]);
-    lager:debug("Res ~p~n",[Res]);
+    lager:info("Response ~p~n",[Res]),
+    delayed_halt(0);
 %%------------------------------------------------------------------------------
 %% @doc
 %% Run specific command 
@@ -428,8 +431,10 @@ run_command(intersects, Options, Args) ->
     lager:debug("Response: ~p", [Res]),
     io:format("Response: ~p~n", [Res]),
     receive
-        {ok, InputFile} -> io:format("Done: ~p~n", [InputFile]);
-        Other -> io:format("Done: ~p~n", [Other])
+        {ok, InputFile} ->
+            lager:info("Done processing input file: ~p~n", [InputFile]);
+        Other ->
+            lager:info("Done: ~p~n", [Other])
     end,
     delayed_halt(0);
  
@@ -506,6 +511,7 @@ connect(Options) ->
 delayed_halt(Code) ->
     case erlang:is_builtin(erlang, halt, 2) of
         true ->
+            timer:sleep(100),
             halt(Code);
         false ->
             case os:type() of

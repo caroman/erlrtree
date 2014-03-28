@@ -20,7 +20,6 @@
 %% @end
 %%----------------------------------------------------------------
 -module(rtree_worker_sup).
-
 -behaviour(supervisor).
 
 %% API

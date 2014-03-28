@@ -20,8 +20,9 @@
 %%% @end
 %%%----------------------------------------------------------------
 -module(rtree_server_app).
-
 -behaviour(application).
+-compile([{parse_transform, lager_transform}]).
+
 
 %% Application callbacks
 -export([start/2, stop/1]).
@@ -35,7 +36,9 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
+    lager:debug("Starting rtree server supervisor"),
     rtree_server_sup:start_link(),
+    lager:debug("Starting rtree worker supervisor"),
     rtree_worker_sup:start_link().
 
 stop(_State) ->

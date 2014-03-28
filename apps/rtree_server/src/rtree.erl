@@ -20,6 +20,7 @@
 %%% @end
 %%%----------------------------------------------------------------
 -module(rtree).
+-compile([{parse_transform, lager_transform}]).
 
 -include("rtree.hrl").
 
@@ -33,6 +34,7 @@
     intersects_file/3
     ]).
 
+
 %%% ----------------------------------------------------------------------------
 %%% @doc Create ETS Table to hold elements for the RTree
 %%% @spec create_ets(Table::atom) 
@@ -40,14 +42,15 @@
 %%% @end
 %%% ----------------------------------------------------------------------------
 create_ets(Table) ->
-    io:format("Table: ~p~n",[Table]),
+    lager:error("ETS table created: ~p~n",[Table]),
     case ets:info(Table) of
         undefined -> ets:new(Table, [set, public, named_table,
             {keypos, 5}, %% first 4 values are header,srid,geos,wkb
             {read_concurrency, true}]),
             {ok, Table};
         Info ->
-            Reason = io:format("ETS table already exists: ~p", [Info]),
+            Reason = io_lib:format("ETS table already exists: ~p", [Info]),
+            lager:debug(Reason),
             {error,  Reason}
     end.
 
@@ -219,7 +222,7 @@ file_read(FilePath) ->
     end.
 
 file_write(OutputFilename, Lines, ResultIds) ->
-    io:format("Saving file: ~p~n", [OutputFilename]),
+    lager:info("Saving file: ~p~n", [OutputFilename]),
     case file:open(OutputFilename, [raw,write,compressed]) of
         {ok, Device} ->
             [Header | Content] = Lines,
@@ -240,7 +243,7 @@ file_write(OutputFilename, Lines, ResultIds) ->
     end.
 
 intersects_file(Tree, InputPath, OutputPath) ->
-    io:format("File received: ~p~n", [InputPath]),
+    lager:info("File received: ~p~n", [InputPath]),
     OutputFilename = case filelib:is_dir(OutputPath) of
         true ->
             filename:join(OutputPath, filename:basename(InputPath));

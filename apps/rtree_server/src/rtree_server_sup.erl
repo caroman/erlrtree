@@ -20,7 +20,6 @@
 %% @end
 %%----------------------------------------------------------------
 -module(rtree_server_sup).
-
 -behaviour(supervisor).
 
 %% API

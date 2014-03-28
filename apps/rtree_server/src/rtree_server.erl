@@ -21,6 +21,7 @@
 %%------------------------------------------------------------------------------
 -module(rtree_server).
 -behaviour(gen_server).
+-compile([{parse_transform, lager_transform}]).
 
 %% =============================================================================
 %%  Server Interface
@@ -246,7 +247,7 @@ handle_call({intersects_file, InputPath, OutputPath}, _, State) ->
             {reply, {error, "Tree not populated yet"}, State};
 
         true ->
-            io:format("XXX: ~p~n", [true]),
+            lager:debug("Tree populated: ~p~n", [true]),
             case rtree:intersects_file(State#state.tree, InputPath, OutputPath) of
                 ok ->
                     {reply, {ok, InputPath},
@@ -278,27 +279,26 @@ handle_call({status}, _From, State) ->
 handle_cast({pintersects_file, InputPath, OutputPath, From}, #state{tree=Tree}=State) ->
     if 
         Tree == undefined ->
-            io:format("Tree not populated yet~n"),
+            lager:debug("Tree not populated yet: ~p~n", [Tree]),
             {noreply, State#state{error_count=State#state.error_count + 1}};
         true ->
-            io:format("Call rtree_worker_pool for file:~p~n", [InputPath]),
+            lager:debug("Call rtree_worker_pool for file: ~p~n", [InputPath]),
             case poolboy:transaction(rtree_worker_pool, fun(Worker) ->
                 gen_server:call(Worker, {intersects_file, Tree, InputPath, OutputPath}) end) of
                     {ok, InputFile} ->
-                        io:format("{ok, ~p}~n", [InputFile]),
-                        io:format("Process ~p~n", [From]),
+                        lager:debug("{ok, ~p} From: ~p~n", [InputFile, From]),
                         From ! {ok, InputFile},
                         {noreply, State#state{ok_count=State#state.ok_count + 1}};
                     {error, Reason} ->
-                        io:format("{error, ~p, ~p}~n", [InputPath, Reason]),
+                        lager:error("{error, ~p, ~p}~n", [InputPath, Reason]),
                         {noreply, State#state{error_count=State#state.error_count + 1}}
             end
     end;
 handle_cast(stop, State) ->
-    io:format("Cast: ~p~n", [State]),
+    lager:debug("Cast: ~p~n", [State]),
     {stop, normal, State};
 handle_cast(Cast, State) ->
-    io:format("Cast: ~p~n", [State]),
+    lager:debug("Cast: ~p~n", [State]),
     {stop, {"Can't not handle cast", Cast}, State}.
 
 %%------------------------------------------------------------------------------
@@ -312,7 +312,7 @@ handle_cast(Cast, State) ->
 %% @end
 %%------------------------------------------------------------------------------
 handle_info(Info, State) ->
-    io:format("Info: ~p~n", [State]),
+    lager:debug("Info: ~p~n", [State]),
     {stop, {"Can't not handle info", Info}, State}.
 
 %%------------------------------------------------------------------------------
@@ -325,7 +325,7 @@ handle_info(Info, State) ->
 %% @end
 %%------------------------------------------------------------------------------
 code_change(_OldVsn, State, _Extra) -> 
-    io:format("Code Change: ~p~n", [State]),
+    lager:debug("Code Change: ~p~n", [State]),
     {ok, State}.
 
 %%------------------------------------------------------------------------------
@@ -337,7 +337,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% @end
 %%------------------------------------------------------------------------------
 terminate(shutdown, State) -> 
-    io:format("Terminate: ~p~n", [State]);
+    lager:debug("Terminate: ~p~n", [State]);
 terminate(_, _) -> ok.
 
 %% =============================================================================

@@ -20,7 +20,7 @@ escriptize: mkdirs compile-escriptize
 
 compile-generate:
 	test -f rel/files || cd rel && rebar create-node nodeid=rtree_server && cd -
-	rebar compile generate
+	cp files/sys.config rel/files/sys.config && rebar compile generate
 
 release: compile-generate
 	@echo "Start with: rel/rtree_server/bin/rtree_server start"

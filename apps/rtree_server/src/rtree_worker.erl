@@ -20,9 +20,9 @@
 %% @end
 %%------------------------------------------------------------------------------
 -module(rtree_worker).
-
 -behaviour(gen_server).
 -behaviour(poolboy_worker).
+-compile([{parse_transform, lager_transform}]).
 
 %% =============================================================================
 %%  Server Interface
@@ -113,7 +113,7 @@ handle_call({intersects_file, Tree, InputPath, OutputPath}, _, State) ->
             {reply, {error, "Tree not populated yet"}, State};
 
         true ->
-            io:format("XXX: ~p~n", [true]),
+            lager:debug("Tree populated, intersecting file: ~p~n", [InputPath]),
             case rtree:intersects_file(Tree, InputPath, OutputPath) of
                 ok ->
                     {reply, {ok, InputPath},
