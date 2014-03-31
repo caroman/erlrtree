@@ -64,6 +64,7 @@
 
 -define(SERVER, ?MODULE).
 -define(DEFAULT_CAPACITY, 10). % 10 elements per node
+-define(WAIT_FOR_SECONDS, 2500).
 
 %% =============================================================================
 %% EXPORTED FUNCTIONS
@@ -72,16 +73,31 @@
 %%------------------------------------------------------------------------------
 %% @doc
 %% Server start_link interface
+%% Register rtree server, max of one Name per node.
+%% Local registration done using rtree_server_Name as ServerName
 %%
 %% @spec start_link(Name, Capacity) -> {ok, Pid} | {error, Error}
 %% where
-%%     Name = string()
+%%     Name = atom()
 %%     Capacity = integer()
 %% @end
 %%------------------------------------------------------------------------------
 start_link(Name, Capacity) ->
-    gen_server:start_link({global, Name}, ?MODULE, [Name, Capacity], []).
-
+    resource_discovery:add_local_resource_tuple({rtree_server, 
+        [{node, node()}, {name, Name}]}),
+    resource_discovery:add_target_resource_types([rtree_server]),
+    resource_discovery:trade_resources(),
+    timer:sleep(?WAIT_FOR_SECONDS),
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:start_link({local, ServerName}, ?MODULE, [Name, Capacity], []).
+    %%case gen_server:start_link({local, ServerName}, ?MODULE, [Name, Capacity], []) of
+    %%    {ok, Pid} ->
+    %%        lager:info("RTree server: ~p, started at pid: ~p", [Name, Pid]),
+    %%        {ok, Pid};
+    %%    Error ->
+    %%        lager:error("RTree server: ~p, starting error: ~p", [Name, Error]),
+    %%        Error
+    %%end.
 %%------------------------------------------------------------------------------
 %% @doc
 %%  Create a rtree element with node capacity Capacity
@@ -93,6 +109,7 @@ start_link(Name, Capacity) ->
 %% @end
 %%------------------------------------------------------------------------------
 create(Name, Capacity) ->
+    % register child  
     rtree_server_sup:start_child(Name, Capacity).
 
 %% @spec create(Name) -> void()
@@ -110,7 +127,8 @@ create(Name) ->
 %% @end
 %%------------------------------------------------------------------------------
 stop(Name) ->
-    gen_server:cast({global, Name}, stop).
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:cast({local, ServerName}, stop).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -122,7 +140,8 @@ stop(Name) ->
 %% @end
 %%------------------------------------------------------------------------------
 build(Name) ->
-    gen_server:call({global, Name}, {build}).
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:call({local, ServerName}, {build}).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -135,7 +154,8 @@ build(Name) ->
 %% @end
 %%------------------------------------------------------------------------------
 intersects(Name, X, Y) ->
-    gen_server:call({global, Name}, {intersects, X, Y}).
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:call({local, ServerName}, {intersects, X, Y}).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -149,7 +169,8 @@ intersects(Name, X, Y) ->
 %% @end
 %%------------------------------------------------------------------------------
 intersects_file(Name, InputPath, OutputPath) ->
-    gen_server:call({global, Name}, {intersects_file, InputPath, OutputPath}).
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:call({local, ServerName}, {intersects_file, InputPath, OutputPath}).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -163,7 +184,8 @@ intersects_file(Name, InputPath, OutputPath) ->
 %% @end
 %%------------------------------------------------------------------------------
 pintersects_file(Name, InputPath, OutputPath, From) ->
-    gen_server:cast({global, Name}, {pintersects_file, InputPath, OutputPath, From}).
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:cast({local, ServerName}, {pintersects_file, InputPath, OutputPath, From}).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -176,7 +198,8 @@ pintersects_file(Name, InputPath, OutputPath, From) ->
 %% @end
 %%------------------------------------------------------------------------------
 load(Name, Dsn) ->
-    gen_server:call({global, Name}, {load, Dsn}, infinity).
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:call({local, ServerName}, {load, Dsn}, infinity).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -186,7 +209,8 @@ load(Name, Dsn) ->
 %% @end
 %%------------------------------------------------------------------------------
 status(Name) ->
-    gen_server:call({global, Name}, {status}).
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:call({local, ServerName}, {status}).
 
 
 %% =============================================================================
@@ -203,13 +227,18 @@ status(Name) ->
 %%------------------------------------------------------------------------------
 init([Name, Capacity]) ->
     process_flag(trap_exit, true),
-    {ok, Table} = rtree:create_ets(Name),
-    {ok, #state{name=Name,
-            capacity=Capacity,
-            tree=undefined,
-            table=Table,
-            ok_count=0,
-            error_count=0}}.
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    case rtree:create_ets(ServerName) of
+        {ok, Table} ->
+                {ok, #state{name=Name,
+                     capacity=Capacity,
+                     tree=undefined,
+                     table=Table,
+                     ok_count=0,
+                     error_count=0}};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 %%------------------------------------------------------------------------------
 %% @private

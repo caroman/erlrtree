@@ -31,15 +31,27 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
+-define(WAIT_FOR_SECONDS, 2500).
+
 %% ===================================================================
 %% Application callbacks
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    lager:debug("Starting rtree server supervisor"),
-    rtree_server_sup:start_link(),
-    lager:debug("Starting rtree worker supervisor"),
-    rtree_worker_sup:start_link().
+    % ok = ensure_contcat(),
+    resource_discovery:add_local_resource_tuple({rtree_supervisor, node()}),
+    resource_discovery:add_target_resource_types([rtree_supervisor]),
+    resource_discovery:trade_resources(),
+    timer:sleep(?WAIT_FOR_SECONDS),
+    lager:debug("Starting rtree supervisor"),
+    case rtree_supervisor:start_link() of
+        {ok, Pid} ->
+            lager:info("Supervisor rtree started at pid: ~p", [Pid]),
+            {ok, Pid};
+        Error ->
+            lager:error("Supervisor rtree starting error: ~p", [Error]),
+            Error
+    end.
 
 stop(_State) ->
     ok.

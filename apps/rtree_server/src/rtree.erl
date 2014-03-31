@@ -42,11 +42,11 @@
 %%% @end
 %%% ----------------------------------------------------------------------------
 create_ets(Table) ->
-    lager:error("ETS table created: ~p~n",[Table]),
     case ets:info(Table) of
         undefined -> ets:new(Table, [set, public, named_table,
             {keypos, 5}, %% first 4 values are header,srid,geos,wkb
             {read_concurrency, true}]),
+            lager:debug("ETS table created: ~p~n", [Table]),
             {ok, Table};
         Info ->
             Reason = io_lib:format("ETS table already exists: ~p", [Info]),
