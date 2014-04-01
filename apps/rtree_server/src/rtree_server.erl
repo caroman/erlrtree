@@ -89,15 +89,14 @@ start_link(Name, Capacity) ->
     resource_discovery:trade_resources(),
     timer:sleep(?WAIT_FOR_SECONDS),
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:start_link({local, ServerName}, ?MODULE, [Name, Capacity], []).
-    %%case gen_server:start_link({local, ServerName}, ?MODULE, [Name, Capacity], []) of
-    %%    {ok, Pid} ->
-    %%        lager:info("RTree server: ~p, started at pid: ~p", [Name, Pid]),
-    %%        {ok, Pid};
-    %%    Error ->
-    %%        lager:error("RTree server: ~p, starting error: ~p", [Name, Error]),
-    %%        Error
-    %%end.
+    case gen_server:start_link({local, ServerName}, ?MODULE, [Name, Capacity], []) of
+        {ok, Pid} ->
+            lager:info("RTree server: ~p, started at pid: ~p", [Name, Pid]),
+            {ok, Pid};
+        Error ->
+            lager:error("RTree server: ~p, starting error: ~p", [Name, Error]),
+            Error
+    end.
 %%------------------------------------------------------------------------------
 %% @doc
 %%  Create a rtree element with node capacity Capacity
@@ -128,7 +127,7 @@ create(Name) ->
 %%------------------------------------------------------------------------------
 stop(Name) ->
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:cast({local, ServerName}, stop).
+    gen_server:cast(ServerName, stop).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -141,7 +140,7 @@ stop(Name) ->
 %%------------------------------------------------------------------------------
 build(Name) ->
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:call({local, ServerName}, {build}).
+    gen_server:call(ServerName, {build}).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -155,7 +154,7 @@ build(Name) ->
 %%------------------------------------------------------------------------------
 intersects(Name, X, Y) ->
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:call({local, ServerName}, {intersects, X, Y}).
+    gen_server:call(ServerName, {intersects, X, Y}).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -170,7 +169,7 @@ intersects(Name, X, Y) ->
 %%------------------------------------------------------------------------------
 intersects_file(Name, InputPath, OutputPath) ->
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:call({local, ServerName}, {intersects_file, InputPath, OutputPath}).
+    gen_server:call(ServerName, {intersects_file, InputPath, OutputPath}).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -185,7 +184,7 @@ intersects_file(Name, InputPath, OutputPath) ->
 %%------------------------------------------------------------------------------
 pintersects_file(Name, InputPath, OutputPath, From) ->
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:cast({local, ServerName}, {pintersects_file, InputPath, OutputPath, From}).
+    gen_server:cast(ServerName, {pintersects_file, InputPath, OutputPath, From}).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -199,7 +198,7 @@ pintersects_file(Name, InputPath, OutputPath, From) ->
 %%------------------------------------------------------------------------------
 load(Name, Dsn) ->
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:call({local, ServerName}, {load, Dsn}, infinity).
+    gen_server:call(ServerName, {load, Dsn}, infinity).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -210,7 +209,7 @@ load(Name, Dsn) ->
 %%------------------------------------------------------------------------------
 status(Name) ->
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:call({local, ServerName}, {status}).
+    gen_server:call(ServerName, {status}).
 
 
 %% =============================================================================

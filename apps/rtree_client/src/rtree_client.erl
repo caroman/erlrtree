@@ -149,8 +149,8 @@ main_option_spec_list() ->
      {node_name,    $n,         "node_name",    {atom, node_name()},
         "Set the client node's <name|sname>. Default rtree_client."},
      {remote_node,  $r,         "remote_node",  {atom,
-        list_to_atom("rtree_server@127.0.0.1")},
-        "Node <name|sname> to connect to. Default rtree_server@127.0.0.1."},
+        node_sname("rtree_server")},
+        "Node <sname> to connect to. Default name rtree_server."},
      {cookie,       $c,         "cookie",       {atom, rtree_server},
         "Set cookie. Default rtree_server."},
      {timeout,      $t,         "timeout",      {integer, 10},
@@ -384,16 +384,16 @@ run_command(create, Options, _Args) ->
 %% @end
 %%------------------------------------------------------------------------------
 run_command(load, Options, Args) ->
-    lager:debug("Run load: ~p~p~n", [Options, Args]),
+    lager:debug("Run load: ~p~p", [Options, Args]),
     RemoteNode = connect(Options),
-    lager:debug("Remote node: ~p~n", [RemoteNode]),
+    lager:debug("Remote node: ~p", [RemoteNode]),
     TreeName = proplists:get_value(tree_name, Options),
     Dsn = proplists:get_value(dsn, Options),
     Res = rpc:call(RemoteNode, rtree_server, load, [TreeName, Dsn]),
     %{ok, Records} = rtree:load_to_list(Dsn),
     %{ok, Tree} = rtree:tree_from_records(Records),
     %lager:debug("~p~n",[Res]);
-    lager:info("Response ~p~n",[Res]),
+    lager:info("Response ~p",[Res]),
     delayed_halt(0);
 %%------------------------------------------------------------------------------
 %% @doc
@@ -476,6 +476,17 @@ node_name() ->
 
 %%------------------------------------------------------------------------------
 %% @doc
+%% Get the node sname from plus the hostname
+%%
+%% @spec node_sname(Name) -> NodeName::atom
+%% @end
+%%------------------------------------------------------------------------------
+node_sname(Name) ->
+    Localhost = net_adm:localhost(),
+    list_to_atom(Name ++ "@" ++ Localhost).
+
+%%------------------------------------------------------------------------------
+%% @doc
 %% Setup and test connection to erlang cluster
 %%
 %% @spec connect(Options) -> RemoteNode::atom
@@ -486,7 +497,7 @@ connect(Options) ->
     NodeName = proplists:get_value(node_name, Options),
     Cookie = proplists:get_value(cookie, Options),
     RemoteNode = proplists:get_value(remote_node, Options),
-    net_kernel:start([NodeName, longnames]),
+    net_kernel:start([NodeName, shortnames]),
     erlang:set_cookie(NodeName, Cookie),
     case net_adm:ping(RemoteNode) of
         pong ->
