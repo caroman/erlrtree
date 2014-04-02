@@ -80,6 +80,18 @@ command_create_usage() ->
 
 %%------------------------------------------------------------------------------
 %% @doc
+%% Command insert parser specific usage
+%%
+%% @spec command_insert_usage() -> ok
+%% @end
+%%------------------------------------------------------------------------------
+command_insert_usage() ->
+    OptSpecList = command_insert_option_spec_list(),
+    getopt:usage(OptSpecList, "rtree_client insert --").
+
+
+%%------------------------------------------------------------------------------
+%% @doc
 %% Command load parser specific usage
 %%
 %% @spec command_load_usage() -> ok
@@ -156,7 +168,7 @@ main_option_spec_list() ->
      {timeout,      $t,         "timeout",      {integer, 10},
         "Timeout for response. Default 10 seconds. If is 0 then none is set."},
      {command,     undefined,   undefined,    atom,
-        "Execute command. Options create, load, build, intersects. "}
+        "Execute command. Options create, insert, load, build, intersects. "}
     ].
 
 %%------------------------------------------------------------------------------
@@ -174,6 +186,25 @@ command_create_option_spec_list() ->
      {tree_name,    undefined,  undefined,      atom,
         "Tree name for rtree server (gen_server and ets)."}
     ].
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command insert specific option specification list
+%%
+%% @spec command_insert_option_spec_list() -> ok
+%% @end
+%%------------------------------------------------------------------------------
+command_insert_option_spec_list() ->
+    [
+     %% {Name, ShortOpt, LongOpt, ArgSpec, HelpMsg}
+     {help,         $h,         "help",         undefined,
+        "Show the program options"},
+     {tree_name,    undefined,  undefined,      atom,
+        "Tree name for rtree server (gen_server and ets)."},
+     {dsn,    undefined,  undefined,      string,
+        "Data source name."}
+    ].
+
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -279,13 +310,19 @@ parse_args(RawArgs) ->
                         fun command_create_usage/0),
                     MergedOptions = lists:append(Options, SubOptions),
                     {MergedOptions, SubArgs};
+                insert ->
+                    {SubOptions, SubArgs} = command_parse_args(Args,
+                        fun command_insert_option_spec_list/0,
+                        fun command_insert_usage/0),
+                    MergedOptions = lists:append(Options, SubOptions),
+                    {MergedOptions, SubArgs};
+
                 load ->
                     {SubOptions, SubArgs} = command_parse_args(Args,
                         fun command_load_option_spec_list/0,
                         fun command_load_usage/0),
                     MergedOptions = lists:append(Options, SubOptions),
                     {MergedOptions, SubArgs};
-
                 build ->
                     {SubOptions, SubArgs} = command_parse_args(Args,
                         fun command_build_option_spec_list/0,
@@ -374,7 +411,36 @@ run_command(create, Options, _Args) ->
     case rtree_call(RemoteNode, rtree_supervisor, create, [TreeName]) of
         {error, Reason} ->
             lager:error(Reason),
-            delayed_halt(0);
+            delayed_halt(1);
+        Response ->
+            lager:info(Response),
+            delayed_halt(0)
+    end;
+%%------------------------------------------------------------------------------
+%% @doc
+%% Run specific command 
+%%
+%% @spec run_command(insert, Options, Args) -> ok
+%% @end
+%%------------------------------------------------------------------------------
+run_command(insert, Options, Args) ->
+    lager:debug("rtree_client:insert options: ~p, args: ~p", [Options, Args]),
+    RemoteNode = connect(Options),
+    TreeName = proplists:get_value(tree_name, Options),
+    Dsn = proplists:get_value(dsn, Options),
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
+    %%Res = rpc:call(RemoteNode, rtree_server, load, [TreeName, Dsn]),
+    RecordList = case rtree:load_to_list(Dsn) of
+        {ok, Records} ->
+            Records; 
+        {error, Reason1} ->
+            lager:error(Reason1),
+            delayed_halt(1)
+    end,
+    case rtree_call(RemoteNode, ServerName, insert, [TreeName, RecordList]) of
+        {error, Reason2} ->
+            lager:error(Reason2),
+            delayed_halt(1);
         Response ->
             lager:info(Response),
             delayed_halt(0)
@@ -389,7 +455,6 @@ run_command(create, Options, _Args) ->
 run_command(load, Options, Args) ->
     lager:debug("rtree_client:load options: ~p, args: ~p", [Options, Args]),
     RemoteNode = connect(Options),
-    lager:debug("Remote node: ~p", [RemoteNode]),
     TreeName = proplists:get_value(tree_name, Options),
     Dsn = proplists:get_value(dsn, Options),
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
@@ -403,7 +468,7 @@ run_command(load, Options, Args) ->
     case rtree_call(RemoteNode, ServerName, load, [TreeName, Dsn]) of
         {error, Reason} ->
             lager:error(Reason),
-            delayed_halt(0);
+            delayed_halt(1);
         Response ->
             lager:info(Response),
             delayed_halt(0)
@@ -418,7 +483,6 @@ run_command(load, Options, Args) ->
 run_command(build, Options, Args) ->
     lager:debug("Run build: ~p~p~n", [Options, Args]),
     RemoteNode = connect(Options),
-    lager:debug("Remote node: ~p~n", [RemoteNode]),
     TreeName = proplists:get_value(tree_name, Options),
     %{ok, Records} = rtree:load_to_list(Dsn),
     %{ok, Tree} = rtree:tree_from_records(Records),
@@ -427,7 +491,7 @@ run_command(build, Options, Args) ->
     case rtree_call(RemoteNode, ServerName, build, [TreeName]) of
         {error, Reason} ->
             lager:error(Reason),
-            delayed_halt(0);
+            delayed_halt(1);
         Response ->
             lager:info(Response),
             delayed_halt(0)
@@ -450,7 +514,7 @@ run_command(intersects, Options, Args) ->
         [TreeName, InputPath, OutputPath, self()]) of
         {error, Reason} ->
             lager:error(Reason),
-            delayed_halt(0);
+            delayed_halt(1);
         Response ->
             lager:info(Response),
             Response
@@ -480,7 +544,6 @@ run_command(doall, Options, Args) ->
     InputPath = filename:absname(proplists:get_value(input_file, Options)),
     OutputPath = filename:absname(proplists:get_value(output_file, Options)),
     Res = rtree_server:intersects_file(local_tree, InputPath, OutputPath),
-    %lager:debug("Response: ~p", [Res]),
     lager:info("Response: ~p", [Res]),
     delayed_halt(0).
  
@@ -528,9 +591,11 @@ connect(Options) ->
         pong ->
             lager:debug("~s: ~s ~p~n", [?ESCRIPT, NodeName, pong]),
             %net_kernel:connect_node(RemoteNode),
+            lager:debug("Remote node: ~p", [RemoteNode]),
             RemoteNode;
         Else ->
             lager:debug("~s: ~s ~p~n", [?ESCRIPT, NodeName, Else]),
+            lager:error("Connecting to remote node: ~p", [RemoteNode]),
             delayed_halt(1)
     end.
 

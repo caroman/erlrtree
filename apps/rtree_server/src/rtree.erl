@@ -26,6 +26,7 @@
 
 -export([
     create_ets/1,
+    insert_to_ets/2,
     load_to_ets/2,
     load_to_list/1,
     build_tree_from_ets/1,
@@ -55,6 +56,19 @@ create_ets(Table) ->
     end.
 
 %%% ----------------------------------------------------------------------------
+%%% @doc Load record or records an rtree ETS named Name to be used by rtree
+%%%
+%%% @spec insert_to_ets(Table, RecordOrRecords) -> true
+%%%   where
+%%%     Table = tab()
+%%%     RecordOrRecords = tuple() | [tuple()]
+%%% @end
+%%% ----------------------------------------------------------------------------
+insert_to_ets(Table, RecordOrRecords) ->
+    ets:insert(Table, RecordOrRecords),
+    ok.
+
+%%% ----------------------------------------------------------------------------
 %%% @doc Load File into an rtree ETS named Name to be used by rtree as a 
 %%% container for the geometry objects
 %%% @spec load_to_ets(Dsn::string, Table::atom) ->
@@ -64,7 +78,7 @@ create_ets(Table) ->
 load_to_ets(Dsn, Table) ->
     case load_to_list(Dsn) of
         {ok, Records} ->
-           lists:foreach(fun(R) -> ets:insert(Table, R) end, Records),
+           insert_to_ets(Table, Records),
            ok;
         {error, Reason} ->
             {error, Reason}
@@ -76,7 +90,6 @@ load_to_ets(Dsn, Table) ->
 %%% @end
 %%% ----------------------------------------------------------------------------
 load_to_list(Dsn) ->
-    WkbReader = erlgeom:wkbreader_create(),
     case erlogr:open(Dsn) of
         {ok, DataSource} ->
             {ok, Layer} = erlogr:ds_get_layer(DataSource, 0),
@@ -84,11 +97,13 @@ load_to_list(Dsn) ->
             Header = lists:map(fun(Field) -> list_to_atom(Field) end,
                 tuple_to_list(element(2, erlogr:fd_get_fields_name(FeatDefn)))),
             {ok, Count} = erlogr:l_get_feature_count(Layer),
-            Records = [feature_to_tuple(WkbReader, Header,
+            Records = [feature_to_tuple(Header,
                 element(2, erlogr:l_get_next_feature(Layer))) %% {ok, Feature}
                 || _ <- lists:seq(1, Count)],
             {ok, Records};
-        undefined -> {error, "Not possible to open datasource"}
+        undefined ->
+            lager:error("Not possible to open datasource: ~p", [Dsn]),
+            {error, "Not possible to open datasource"}
     end.
 
 %%% ----------------------------------------------------------------------------
@@ -140,10 +155,10 @@ build_tree_from_records(Records) ->
 build_tree_from_ets(Table) ->
     case ets:info(Table, size) of
         Size when Size > 0  ->
+            WkbReader = erlgeom:wkbreader_create(),
             Tree = erlgeom:geosstrtree_create(),
             lists:foreach(
-                fun(R) -> erlgeom:geosstrtree_insert(Tree, element(3, R), R)
-                end,
+                fun(R) -> tree_insert_record(Tree, WkbReader, R) end,
                 ets:match_object(Table, '$1')),
             {ok, Tree};
         Size when Size == 0 ->
@@ -157,14 +172,21 @@ build_tree_from_ets(Table) ->
 %%% @spec feature_to_tuple(WkbReader, Header, Feature) -> record(feature)
 %%% @end
 %%% ----------------------------------------------------------------------------
-feature_to_tuple(WkbReader, Header, Feature) ->
+feature_to_tuple(Header, Feature) ->
     {ok, Geom} = erlogr:f_get_geometry_ref(Feature),
     {ok, Wkb} = erlogr:g_export_to_wkb(Geom),
-    GeosGeom = erlgeom:wkbreader_read(WkbReader, Wkb),
-    FieldsA = [Header, -1, GeosGeom, Wkb], % header, srid, geom, wkb
+    FieldsA = [Header, -1, undefined, Wkb], % header, srid, geom, wkb
     {ok, Fields} = erlogr:f_get_fields(Feature),
     FieldsB = tuple_to_list(Fields),
     list_to_tuple(lists:append(FieldsA, FieldsB)).
+
+%%% ----------------------------------------------------------------------------
+%%% @doc Helper to convert Feature from Layer into a Record for the ETS
+%%% @spec geom_from_tuple(WkbReader, Header, Feature) -> record(feature)
+%%% @end
+%%% ----------------------------------------------------------------------------
+geom_from_tuple(WkbReader, Record) ->
+    erlgeom:wkbreader_read(WkbReader, element(4, Record)).
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Intersects X,Y point with Tree

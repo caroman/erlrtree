@@ -32,6 +32,7 @@
     create/2,
     stop/1,
     build/1,
+    insert/2,
     intersects/3,
     intersects_file/3,
     pintersects_file/4,
@@ -59,6 +60,7 @@
     capacity=undefined,
     tree=undefined,
     table=undefined,
+    wkbreader=undefined,
     ok_count=0,
     error_count=0}).
 
@@ -140,6 +142,21 @@ stop(Name) ->
 build(Name) ->
     ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
     gen_server:call(ServerName, {build}).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server insert interface
+%%
+%% @spec insert(Name, Records) -> {ok, Bool} | {error, Reason}
+%%  where
+%%      Name = tab()
+%%      Records = [tuple()]
+%% @end
+%%------------------------------------------------------------------------------
+insert(Name, Records) ->
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:call(ServerName, {insert, Records}, infinity).
+
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -228,10 +245,12 @@ init([Name, Capacity]) ->
     ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
     case rtree:create_ets(ServerName) of
         {ok, Table} ->
+                WkbReader = erlgeom:wkbreader_create(),
                 {ok, #state{name=Name,
                      capacity=Capacity,
                      tree=undefined,
                      table=Table,
+                     wkbreader=WkbReader,
                      ok_count=0,
                      error_count=0}};
         {error, Reason} ->
@@ -253,6 +272,12 @@ init([Name, Capacity]) ->
 handle_call({build}, _From, State) ->
     case rtree:build_tree_from_ets(State#state.table) of
         {ok, Tree} -> {reply, ok, State#state{tree=Tree}};
+        {error, Reason} -> {reply, {error, Reason}, State}
+    end;
+handle_call({insert, Records}, _From, State) ->
+    Table = State#state.table,
+    case rtree:insert_to_ets(Table, Records) of
+        ok -> {reply, {ok, Table}, State#state{table=Table}};
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
 handle_call({intersects, X, Y}, _, State) ->
