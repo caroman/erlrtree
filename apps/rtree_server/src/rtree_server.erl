@@ -83,12 +83,11 @@
 %% @end
 %%------------------------------------------------------------------------------
 start_link(Name, Capacity) ->
-    resource_discovery:add_local_resource_tuple({rtree_server, 
-        [{node, node()}, {name, Name}]}),
-    resource_discovery:add_target_resource_types([rtree_server]),
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    resource_discovery:add_local_resource_tuple({ServerName, node()}),
+    resource_discovery:add_target_resource_types([ServerName]),
     resource_discovery:trade_resources(),
     timer:sleep(?WAIT_FOR_SECONDS),
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
     case gen_server:start_link({local, ServerName}, ?MODULE, [Name, Capacity], []) of
         {ok, Pid} ->
             lager:info("RTree server: ~p, started at pid: ~p", [Name, Pid]),
@@ -126,7 +125,7 @@ create(Name) ->
 %% @end
 %%------------------------------------------------------------------------------
 stop(Name) ->
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
     gen_server:cast(ServerName, stop).
 
 %%------------------------------------------------------------------------------
@@ -139,7 +138,7 @@ stop(Name) ->
 %% @end
 %%------------------------------------------------------------------------------
 build(Name) ->
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
     gen_server:call(ServerName, {build}).
 
 %%------------------------------------------------------------------------------
@@ -153,7 +152,7 @@ build(Name) ->
 %% @end
 %%------------------------------------------------------------------------------
 intersects(Name, X, Y) ->
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
     gen_server:call(ServerName, {intersects, X, Y}).
 
 %%------------------------------------------------------------------------------
@@ -168,7 +167,7 @@ intersects(Name, X, Y) ->
 %% @end
 %%------------------------------------------------------------------------------
 intersects_file(Name, InputPath, OutputPath) ->
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
     gen_server:call(ServerName, {intersects_file, InputPath, OutputPath}).
 
 %%------------------------------------------------------------------------------
@@ -183,7 +182,7 @@ intersects_file(Name, InputPath, OutputPath) ->
 %% @end
 %%------------------------------------------------------------------------------
 pintersects_file(Name, InputPath, OutputPath, From) ->
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
     gen_server:cast(ServerName, {pintersects_file, InputPath, OutputPath, From}).
 
 %%------------------------------------------------------------------------------
@@ -197,7 +196,7 @@ pintersects_file(Name, InputPath, OutputPath, From) ->
 %% @end
 %%------------------------------------------------------------------------------
 load(Name, Dsn) ->
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
     gen_server:call(ServerName, {load, Dsn}, infinity).
 
 %%------------------------------------------------------------------------------
@@ -208,7 +207,7 @@ load(Name, Dsn) ->
 %% @end
 %%------------------------------------------------------------------------------
 status(Name) ->
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
     gen_server:call(ServerName, {status}).
 
 
@@ -226,7 +225,7 @@ status(Name) ->
 %%------------------------------------------------------------------------------
 init([Name, Capacity]) ->
     process_flag(trap_exit, true),
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
     case rtree:create_ets(ServerName) of
         {ok, Table} ->
                 {ok, #state{name=Name,

@@ -368,14 +368,17 @@ run(RawArgs) ->
 %% @end
 %%------------------------------------------------------------------------------
 run_command(create, Options, _Args) ->
-    lager:debug("Run create: ~p~n", [Options]),
+    lager:debug("rtree_client:create options: ~p", [Options]),
     RemoteNode = connect(Options),
-    lager:debug("Remote node: ~p~n", [RemoteNode]),
     TreeName = proplists:get_value(tree_name, Options),
-    lager:debug("rtree_server:create(~p)~n", [TreeName]),
-    Res = rpc:call(RemoteNode, rtree_server, create, [TreeName]),
-    lager:info("Response: ~p~n",[Res]),
-    delayed_halt(0);
+    case rtree_call(RemoteNode, rtree_supervisor, create, [TreeName]) of
+        {error, Reason} ->
+            lager:error(Reason),
+            delayed_halt(0);
+        Response ->
+            lager:info(Response),
+            delayed_halt(0)
+    end;
 %%------------------------------------------------------------------------------
 %% @doc
 %% Run specific command 
@@ -384,17 +387,27 @@ run_command(create, Options, _Args) ->
 %% @end
 %%------------------------------------------------------------------------------
 run_command(load, Options, Args) ->
-    lager:debug("Run load: ~p~p", [Options, Args]),
+    lager:debug("rtree_client:load options: ~p, args: ~p", [Options, Args]),
     RemoteNode = connect(Options),
     lager:debug("Remote node: ~p", [RemoteNode]),
     TreeName = proplists:get_value(tree_name, Options),
     Dsn = proplists:get_value(dsn, Options),
-    Res = rpc:call(RemoteNode, rtree_server, load, [TreeName, Dsn]),
-    %{ok, Records} = rtree:load_to_list(Dsn),
-    %{ok, Tree} = rtree:tree_from_records(Records),
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
+    %%Res = rpc:call(RemoteNode, rtree_server, load, [TreeName, Dsn]),
+    %%{ok, Records} = rtree:load_to_list(Dsn),
+    %%{ok, Tree} = rtree:tree_from_records(Records),
     %lager:debug("~p~n",[Res]);
-    lager:info("Response ~p",[Res]),
-    delayed_halt(0);
+    %lager:info("Response ~p",[Res]),
+    %delayed_halt(0);
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
+    case rtree_call(RemoteNode, ServerName, load, [TreeName, Dsn]) of
+        {error, Reason} ->
+            lager:error(Reason),
+            delayed_halt(0);
+        Response ->
+            lager:info(Response),
+            delayed_halt(0)
+    end;
 %%------------------------------------------------------------------------------
 %% @doc
 %% Run specific command 
@@ -407,12 +420,18 @@ run_command(build, Options, Args) ->
     RemoteNode = connect(Options),
     lager:debug("Remote node: ~p~n", [RemoteNode]),
     TreeName = proplists:get_value(tree_name, Options),
-    Res = rpc:call(RemoteNode, rtree_server, build, [TreeName]),
     %{ok, Records} = rtree:load_to_list(Dsn),
     %{ok, Tree} = rtree:tree_from_records(Records),
     %lager:debug("~p~n",[Res]);
-    lager:info("Response ~p~n",[Res]),
-    delayed_halt(0);
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
+    case rtree_call(RemoteNode, ServerName, build, [TreeName]) of
+        {error, Reason} ->
+            lager:error(Reason),
+            delayed_halt(0);
+        Response ->
+            lager:info(Response),
+            delayed_halt(0)
+    end;
 %%------------------------------------------------------------------------------
 %% @doc
 %% Run specific command 
@@ -421,20 +440,26 @@ run_command(build, Options, Args) ->
 %% @end
 %%------------------------------------------------------------------------------
 run_command(intersects, Options, Args) ->
-    lager:debug("Run intersects: Options:~p Args:~p~n", [Options, Args]),
+    lager:debug("rtree_client:intersects Options:~p Args:~p~n", [Options, Args]),
+    RemoteNode = connect(Options),
     TreeName = proplists:get_value(tree_name, Options),
     InputPath = filename:absname(proplists:get_value(input_file, Options)),
     OutputPath = filename:absname(proplists:get_value(output_file, Options)),
-    RemoteNode = connect(Options),
-    Res = rpc:call(RemoteNode, rtree_server, pintersects_file,
-        [TreeName, InputPath, OutputPath, self()]),
-    lager:debug("Response: ~p", [Res]),
-    io:format("Response: ~p~n", [Res]),
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
+    _Res = case rtree_call(RemoteNode, ServerName, pintersects_file,
+        [TreeName, InputPath, OutputPath, self()]) of
+        {error, Reason} ->
+            lager:error(Reason),
+            delayed_halt(0);
+        Response ->
+            lager:info(Response),
+            Response
+    end,
     receive
         {ok, InputFile} ->
-            lager:info("Done processing input file: ~p~n", [InputFile]);
+            lager:info("Done processing input file: ~p", [InputFile]);
         Other ->
-            lager:info("Done: ~p~n", [Other])
+            lager:info("Done: ~p", [Other])
     end,
     delayed_halt(0);
  
@@ -446,7 +471,7 @@ run_command(intersects, Options, Args) ->
 %% @end
 %%------------------------------------------------------------------------------
 run_command(doall, Options, Args) ->
-    lager:debug("Running doall with: ~p~p~n", [Options, Args]),
+    lager:debug("Running doall with: ~p ~p", [Options, Args]),
     Dsn = proplists:get_value(dsn, Options),
     ok = application:start(rtree_server),
     rtree_server:create(local_tree),
@@ -456,7 +481,7 @@ run_command(doall, Options, Args) ->
     OutputPath = filename:absname(proplists:get_value(output_file, Options)),
     Res = rtree_server:intersects_file(local_tree, InputPath, OutputPath),
     %lager:debug("Response: ~p", [Res]),
-    io:format("Response: ~p~n", [Res]),
+    lager:info("Response: ~p", [Res]),
     delayed_halt(0).
  
 %% ====================================================================
@@ -508,6 +533,32 @@ connect(Options) ->
             lager:debug("~s: ~s ~p~n", [?ESCRIPT, NodeName, Else]),
             delayed_halt(1)
     end.
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Helerper function to submit rpc call where given resource is found
+%%
+%% @spec rtree_call(RemoteNode, Resource, Function, Args) -> Response
+%% @end
+%%------------------------------------------------------------------------------
+rtree_call(RemoteNode, Resource, Function, Args) ->
+    lager:debug("~p:resource_discovery:get_resource(~p)",
+        [RemoteNode, Resource]),
+    case rpc:call(RemoteNode, resource_discovery, get_resource, [Resource]) of
+        {ok, ServerNode} ->
+            lager:debug("Node found: ~p", [ServerNode]),
+            Res = rpc:call(ServerNode, rtree_server, Function, Args),
+            lager:debug("~p:rtree_server:~p ~p",
+                [ServerNode, Function, Args]),
+            lager:debug("Response: ~p", [Res]),
+            Res;
+        {error, not_found} ->
+            lager:error("Resource ~p not found in node ~p",
+               [Resource, RemoteNode]),
+            {error, "Resource not found in node"}
+    end.
+
+
 
 %%------------------------------------------------------------------------------
 %% @doc
