@@ -437,14 +437,24 @@ run_command(insert, Options, Args) ->
             lager:error(Reason1),
             delayed_halt(1)
     end,
-    case rtree_call(RemoteNode, ServerName, insert, [TreeName, RecordList]) of
-        {error, Reason2} ->
-            lager:error(Reason2),
-            delayed_halt(1);
-        Response ->
-            lager:info(Response),
-            delayed_halt(0)
-    end;
+    %% TODO:Geometries could be validated before inserting
+    NumberInserted = lists:foldl(
+        fun(R, Acc) ->
+            case rtree_call(RemoteNode, ServerName, insert, [TreeName, R]) of
+                {error, Reason2} ->
+                    lager:error("~p for record ~p", [Reason2, R]),
+                    Acc;
+                Response ->
+                    lager:debug("Inserted: ~p", [Response]),
+                    Acc + 1
+            end
+        end,
+        0,
+        RecordList
+    ),
+    lager:info("Records inserted ~p of ~p",
+        [NumberInserted, length(RecordList)]),
+    delayed_halt(0);
 %%------------------------------------------------------------------------------
 %% @doc
 %% Run specific command 
