@@ -356,7 +356,7 @@ parse_args(RawArgs) ->
                     usage(),
                     delayed_halt(1);
                 Other ->
-                    lager:warning("Wrong argument <command>: ~p~n", [Other]),
+                    lager:warning("Wrong argument <command>: ~p", [Other]),
                     usage(),
                     delayed_halt(1)
             end;
@@ -444,7 +444,7 @@ run_command(insert, Options, Args) ->
         {ok, Records} ->
             Records; 
         {error, Reason1} ->
-            lager:error(Reason1),
+            lager:error("~p", [Reason1]),
             delayed_halt(1)
     end,
     %% TODO:Geometries could be validated before inserting
@@ -487,10 +487,10 @@ run_command(load, Options, Args) ->
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
     case rtree_call(RemoteNode, ServerName, load, [TreeName, Dsn]) of
         {error, Reason} ->
-            lager:error(Reason),
+            lager:error("~p", [Reason]),
             delayed_halt(1);
         Response ->
-            lager:info(Response),
+            lager:info("~p", [Response]),
             delayed_halt(0)
     end;
 %%------------------------------------------------------------------------------
@@ -510,10 +510,10 @@ run_command(build, Options, Args) ->
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
     case rtree_call(RemoteNode, ServerName, build, [TreeName]) of
         {error, Reason} ->
-            lager:error(Reason),
+            lager:error("~p", [Reason]),
             delayed_halt(1);
         Response ->
-            lager:info(Response),
+            lager:info("~p", [Response]),
             delayed_halt(0)
     end;
 %%------------------------------------------------------------------------------
@@ -533,10 +533,10 @@ run_command(intersects, Options, Args) ->
     _Res = case rtree_call(RemoteNode, ServerName, pintersects_file,
         [TreeName, InputPath, OutputPath, self()]) of
         {error, Reason} ->
-            lager:error(Reason),
+            lager:error("~p", [Reason]),
             delayed_halt(1);
         Response ->
-            lager:info(Response),
+            lager:info("~p", [Response]),
             Response
     end,
     receive
@@ -609,12 +609,12 @@ connect(Options) ->
     erlang:set_cookie(NodeName, Cookie),
     case net_adm:ping(RemoteNode) of
         pong ->
-            lager:debug("~s: ~s ~p~n", [?ESCRIPT, NodeName, pong]),
+            lager:debug("~s: ~s ~p", [?ESCRIPT, NodeName, pong]),
             %net_kernel:connect_node(RemoteNode),
             lager:debug("Remote node: ~p", [RemoteNode]),
             RemoteNode;
         Else ->
-            lager:debug("~s: ~s ~p~n", [?ESCRIPT, NodeName, Else]),
+            lager:debug("~s: ~s ~p", [?ESCRIPT, NodeName, Else]),
             lager:error("Connecting to remote node: ~p", [RemoteNode]),
             delayed_halt(1)
     end.
