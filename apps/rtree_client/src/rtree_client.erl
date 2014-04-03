@@ -436,10 +436,10 @@ run_command(create, Options, _Args) ->
 run_command(insert, Options, Args) ->
     lager:debug("rtree_client:insert options: ~p, args: ~p", [Options, Args]),
     RemoteNode = connect(Options),
-    TreeName = proplists:get_value(tree_name, Options),
     Dsn = proplists:get_value(dsn, Options),
+    TreeName = proplists:get_value(tree_name, Options),
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
-    %%Res = rpc:call(RemoteNode, rtree_server, load, [TreeName, Dsn]),
+    %% TODO:Geometries lazy loading
     RecordList = case rtree:load_to_list(Dsn) of
         {ok, Records} ->
             Records; 
@@ -475,15 +475,8 @@ run_command(insert, Options, Args) ->
 run_command(load, Options, Args) ->
     lager:debug("rtree_client:load options: ~p, args: ~p", [Options, Args]),
     RemoteNode = connect(Options),
-    TreeName = proplists:get_value(tree_name, Options),
     Dsn = proplists:get_value(dsn, Options),
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
-    %%Res = rpc:call(RemoteNode, rtree_server, load, [TreeName, Dsn]),
-    %%{ok, Records} = rtree:load_to_list(Dsn),
-    %%{ok, Tree} = rtree:tree_from_records(Records),
-    %lager:debug("~p~n",[Res]);
-    %lager:info("Response ~p",[Res]),
-    %delayed_halt(0);
+    TreeName = proplists:get_value(tree_name, Options),
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
     case rtree_call(RemoteNode, ServerName, load, [TreeName, Dsn]) of
         {error, Reason} ->
@@ -504,9 +497,6 @@ run_command(build, Options, Args) ->
     lager:debug("Run build: ~p~p~n", [Options, Args]),
     RemoteNode = connect(Options),
     TreeName = proplists:get_value(tree_name, Options),
-    %{ok, Records} = rtree:load_to_list(Dsn),
-    %{ok, Tree} = rtree:tree_from_records(Records),
-    %lager:debug("~p~n",[Res]);
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
     case rtree_call(RemoteNode, ServerName, build, [TreeName]) of
         {error, Reason} ->
@@ -526,9 +516,9 @@ run_command(build, Options, Args) ->
 run_command(intersects, Options, Args) ->
     lager:debug("rtree_client:intersects Options:~p Args:~p~n", [Options, Args]),
     RemoteNode = connect(Options),
-    TreeName = proplists:get_value(tree_name, Options),
     InputPath = filename:absname(proplists:get_value(input_file, Options)),
     OutputPath = filename:absname(proplists:get_value(output_file, Options)),
+    TreeName = proplists:get_value(tree_name, Options),
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
     _Res = case rtree_call(RemoteNode, ServerName, pintersects_file,
         [TreeName, InputPath, OutputPath, self()]) of
@@ -549,9 +539,9 @@ run_command(intersects, Options, Args) ->
  
 %%------------------------------------------------------------------------------
 %% @doc
-%% Run specific command 
+%% Run intersects in local mode executing create, load, build, and intersects
 %%
-%% @spec run_command(load, Options, Args) -> ok
+%% @spec run_command(doall, Options, Args) -> ok
 %% @end
 %%------------------------------------------------------------------------------
 run_command(doall, Options, Args) ->

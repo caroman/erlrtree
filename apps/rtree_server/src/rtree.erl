@@ -28,6 +28,7 @@
     build_tree_from_ets/1,
     build_tree_from_records/1,
     create_ets/2,
+    filterfun/4,
     geom_from_record/2,
     insert_to_ets/2,
     intersects/3,
@@ -57,7 +58,7 @@ create_ets(Table, HeirTuple) ->
             {ok, Table};
         Info ->
             Reason = io_lib:format("ETS table already exists: ~p", [Info]),
-            lager:debug(Reason),
+            lager:debug("~p", [Reason]),
             {error,  Reason}
     end.
 
@@ -205,6 +206,16 @@ intersects(Tree, X, Y) ->
         erlgeom:intersects(element(3, E), Point) == true],
     {ok, InElements}.
 
+%%% ----------------------------------------------------------------------------
+%%% @doc Apply filter fun after bbox intersection of X,Y point with Tree
+%%% @spec filterfun(Tree, float(), float(), fun()) -> [Element]
+%%% @end
+%%% ----------------------------------------------------------------------------
+filterfun(Tree, X, Y, FilterFun) ->
+    Point = erlgeom:to_geom({'Point', [X, Y]}),
+    Elements = erlgeom:geosstrtree_query(Tree, Point),
+    InElements = [E || E <- Elements, FilterFun(E, Point) == true],
+    {ok, InElements}.
 
 %% =============================================================================
 %%  File related functions
