@@ -41,7 +41,7 @@
 main(Args) ->
     os:putenv("ESCRIPT", "1"),
     lager:start(),
-    lager:set_loglevel(lager_console_backend, debug),
+    lager:set_loglevel(lager_console_backend, warning),
     case catch(run(Args)) of
         ok ->
             ok;
@@ -147,17 +147,14 @@ main_option_spec_list() ->
     %JobsHelp = io_lib:format(
     %    "Number of concurrent workers a command may use. Default: ~B",
     %    [Jobs]),
-    %VerboseHelp = "Verbosity level (-v, -vv, -vvv, --verbose 3). Default: 0",
+    VerboseHelp = "Verbosity level (debug, info, warning, error). Default: warning",
     [
      %% {Name, ShortOpt, LongOpt, ArgSpec, HelpMsg}
      {help,         $h,         "help",         undefined,
         "Show the program options"},
-     %%{verbose,      $v,         "verbose",      integer,
-     %%   VerboseHelp},
+     {verbose,      $v,         "verbose",      {atom, warning}, VerboseHelp},
      %%{version,      $V,         "version",      undefined,
      %%   "Show version information"},
-     %%{force,        $f,         "force",        undefined,
-     %%   "Force"},
      {node_name,    $n,         "node_name",    {atom, node_name()},
         "Set the client node's <name|sname>. Default rtree_client."},
      {remote_node,  $r,         "remote_node",  {atom,
@@ -300,6 +297,19 @@ parse_args(RawArgs) ->
                     usage(),
                     delayed_halt(1);
                 false -> false
+            end,
+            case proplists:get_value(verbose, Options) of
+                debug ->
+                    lager:set_loglevel(lager_console_backend, debug);
+                info ->
+                    lager:set_loglevel(lager_console_backend, info);
+                warning ->
+                    lager:set_loglevel(lager_console_backend, warning);
+                error ->
+                    lager:set_loglevel(lager_console_backend, error);
+                _ ->
+                    lager:error("Verbose option given is not valid."),
+                    delayed_halt(1)
             end,
             %% SubArgs contains Args, if appending is done then values
             %% will be replicated
