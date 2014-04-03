@@ -25,28 +25,34 @@
 -include("rtree.hrl").
 
 -export([
-    create_ets/1,
-    insert_to_ets/2,
-    load_to_ets/2,
-    load_to_list/1,
     build_tree_from_ets/1,
     build_tree_from_records/1,
+    create_ets/2,
+    geom_from_record/2,
+    insert_to_ets/2,
     intersects/3,
-    intersects_file/3
+    intersects_file/3,
+    load_to_ets/2,
+    load_to_list/1
     ]).
 
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Create ETS Table to hold elements for the RTree
-%%% @spec create_ets(Table::atom) 
+%%% @spec create_ets(Table::atom, HeirTuple::tuple) 
 %%%     -> {atom(ok), Table::atom} | {atom(error), Reason::string()}
+%%%     where
+%%%         HeirTuple = {heir, none} | {heir, Pid::pid, HeirData::term}   
 %%% @end
 %%% ----------------------------------------------------------------------------
-create_ets(Table) ->
+create_ets(Table, HeirTuple) ->
     case ets:info(Table) of
         undefined -> ets:new(Table, [set, public, named_table,
             {keypos, 5}, %% first 4 values are header,srid,geos,wkb
-            {read_concurrency, true}]),
+            {read_concurrency, true},
+            {write_concurrency, true},
+            HeirTuple
+            ]),
             lager:debug("ETS table created: ~p~n", [Table]),
             {ok, Table};
         Info ->
@@ -115,10 +121,9 @@ load_to_list(Dsn) ->
 tree_insert_record(Tree, WkbReader, Record) ->
     case element(3, Record) of
         undefined ->
-            Wkb = element(4, Record),
-            Geom = erlgeom:wkbreader_read(WkbReader, Wkb),
-            NewRecord = setelement(3, Record, Geom),
-            erlgeom:geosstrtree_insert(Tree, Geom, NewRecord);
+            GeosGeom = geom_from_record(WkbReader, Record),
+            NewRecord = setelement(3, Record, GeosGeom),
+            erlgeom:geosstrtree_insert(Tree, GeosGeom, NewRecord);
         GeosGeom ->
             erlgeom:geosstrtree_insert(Tree, GeosGeom, Record)
     end.
@@ -182,10 +187,10 @@ feature_to_tuple(Header, Feature) ->
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Helper to convert Feature from Layer into a Record for the ETS
-%%% @spec geom_from_tuple(WkbReader, Header, Feature) -> record(feature)
+%%% @spec geom_from_record(WkbReader, Header, Feature) -> record(feature)
 %%% @end
 %%% ----------------------------------------------------------------------------
-geom_from_tuple(WkbReader, Record) ->
+geom_from_record(WkbReader, Record) ->
     erlgeom:wkbreader_read(WkbReader, element(4, Record)).
 
 %%% ----------------------------------------------------------------------------

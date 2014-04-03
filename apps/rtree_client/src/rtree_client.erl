@@ -420,10 +420,10 @@ run_command(create, Options, _Args) ->
     TreeName = proplists:get_value(tree_name, Options),
     case rtree_call(RemoteNode, rtree_supervisor, create, [TreeName]) of
         {error, Reason} ->
-            lager:error(Reason),
+            lager:error("~p", [Reason]),
             delayed_halt(1);
         Response ->
-            lager:info(Response),
+            lager:info("~p", [Response]),
             delayed_halt(0)
     end;
 %%------------------------------------------------------------------------------

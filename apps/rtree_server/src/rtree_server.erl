@@ -243,7 +243,8 @@ status(Name) ->
 init([Name, Capacity]) ->
     process_flag(trap_exit, true),
     ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
-    case rtree:create_ets(ServerName) of
+    HeirTuple = {heir, erlang:whereis(rtree_supervisor), []},
+    case rtree:create_ets(ServerName, HeirTuple) of
         {ok, Table} ->
                 WkbReader = erlgeom:wkbreader_create(),
                 {ok, #state{name=Name,
