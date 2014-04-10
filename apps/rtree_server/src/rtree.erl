@@ -28,11 +28,12 @@
     build_tree_from_ets/1,
     build_tree_from_records/1,
     create_ets/2,
-    filterfun/4,
     geom_from_record/2,
     insert_to_ets/2,
     intersects/3,
     intersects_file/3,
+    filter/4,
+    filter_file/4,
     load_to_ets/2,
     load_to_list/1
     ]).
@@ -46,13 +47,13 @@
 %%%         HeirTuple = {heir, none} | {heir, Pid::pid, HeirData::term}   
 %%% @end
 %%% ----------------------------------------------------------------------------
-create_ets(Table, HeirTuple) ->
+create_ets(Table, _HeirTuple) ->
     case ets:info(Table) of
         undefined -> ets:new(Table, [set, public, named_table,
             {keypos, 5}, %% first 4 values are header,srid,geos,wkb
             {read_concurrency, true},
             {write_concurrency, true},
-            HeirTuple
+            {heir, none}
             ]),
             lager:debug("ETS table created: ~p~n", [Table]),
             {ok, Table};
@@ -207,19 +208,39 @@ intersects(Tree, X, Y) ->
     {ok, InElements}.
 
 %%% ----------------------------------------------------------------------------
-%%% @doc Apply filter fun after bbox intersection of X,Y point with Tree
-%%% @spec filterfun(Tree, float(), float(), fun()) -> [Element]
+%%% @doc Apply filter fun after bbox intersection of X,Y point with Tree.
+%%% Fun should return atom true to pass the filter and be in the output
+%%% @spec filter(Tree, float(), float(), fun()) -> [Element]
 %%% @end
 %%% ----------------------------------------------------------------------------
-filterfun(Tree, X, Y, FilterFun) ->
+filter(Tree, X, Y, FunStr) ->
+    %% Extract fun from fun string
+    {ok, Tokens, _} = erl_scan:string(FunStr),
+    {ok, [Form]} = erl_parse:parse_exprs(Tokens),
+    Bindings = erl_eval:add_binding('B', 2, erl_eval:new_bindings()),
+    {value, Fun, _} = erl_eval:expr(Form, Bindings),
     Point = erlgeom:to_geom({'Point', [X, Y]}),
     Elements = erlgeom:geosstrtree_query(Tree, Point),
-    InElements = [E || E <- Elements, FilterFun(E, Point) == true],
+    InElements = [E || E <- Elements, Fun(E, Point) == true],
     {ok, InElements}.
 
 %% =============================================================================
 %%  File related functions
 %% =============================================================================
+tree_filter_points(Tree, Points, Filter) ->
+    Ids = lists:map(fun({X, Y}) ->
+            {ok, InElements} = rtree:filter(Tree, X, Y, Filter),
+            Size = length(InElements),
+            case Size of
+                Size when Size > 0  ->
+                    element(5, lists:last(InElements));
+                Size when Size == 0 ->
+                    0
+            end 
+        end,
+        Points),
+    Ids.
+
 tree_query_points(Tree, Points) ->
     Ids = lists:map(fun({X, Y}) ->
             {ok, InElements} = rtree:intersects(Tree, X, Y),
@@ -280,6 +301,26 @@ file_write(OutputFilename, Lines, ResultIds) ->
             {error, Reason}
     end.
 
+filter_file(Tree, InputPath, OutputPath, Filter) ->
+    lager:info("File received: ~p~n", [InputPath]),
+    OutputFilename = case filelib:is_dir(OutputPath) of
+        true ->
+            filename:join(OutputPath, filename:basename(InputPath));
+        false ->
+            OutputPath
+    end,
+    case file_read(InputPath) of
+        {ok, Lines} ->
+            case lines_extract_points(Lines, "longitude", "latitude") of
+                {ok, Points} ->
+                    ResultIds = tree_filter_points(Tree, Points, Filter),
+                    file_write(OutputFilename, Lines, ResultIds);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {error, Reason} -> 
+            {error, Reason}
+    end.
 intersects_file(Tree, InputPath, OutputPath) ->
     lager:info("File received: ~p~n", [InputPath]),
     OutputFilename = case filelib:is_dir(OutputPath) of

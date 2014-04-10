@@ -27,17 +27,20 @@
 %%  Server Interface
 %% =============================================================================
 -export([
-    start_link/2,
+    build/1,
     create/1,
     create/2,
-    stop/1,
-    build/1,
     insert/2,
+    filter/4,
     intersects/3,
+    filter_file/4,
     intersects_file/3,
-    pintersects_file/4,
     load/2,
-    status/1
+    pfilter_file/5,
+    pintersects_file/4,
+    start_link/2,
+    status/1,
+    stop/1
     ]).
 
 %% =============================================================================
@@ -174,7 +177,24 @@ intersects(Name, X, Y) ->
 
 %%------------------------------------------------------------------------------
 %% @doc
-%% Server intersects interface
+%% Server filter interface
+%%
+%% @spec filter(Name, X, Y, Filter) -> {ok, bool()} | {error, Reason}
+%%  where
+%%      Name = atom()
+%%      X = float()
+%%      Y = float()
+%%      Filter = fun()
+%% @end
+%%------------------------------------------------------------------------------
+filter(Name, X, Y, Filter) ->
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:call(ServerName, {filter, X, Y, Filter}).
+
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server intersects file interface
 %%
 %% @spec intersects_file(Name, InputPath, OutputPath) ->
 %%      {ok, InputPath} | {error, Reason}
@@ -189,7 +209,25 @@ intersects_file(Name, InputPath, OutputPath) ->
 
 %%------------------------------------------------------------------------------
 %% @doc
-%% Server intersects interface
+%% Server filter interface
+%%
+%% @spec filter_file(Name, InputPath, OutputPath, Filter) ->
+%%      {ok, InputPath} | {error, Reason}
+%%  where
+%%      Name = atom()
+%%      InputPath = string()
+%%      OutputPath = string()
+%%      Filter = fun()
+%% @end
+%%------------------------------------------------------------------------------
+filter_file(Name, InputPath, OutputPath, Filter) ->
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:call(ServerName, {filter_file, InputPath, OutputPath, Filter}).
+
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server intersects pool file interface
 %%
 %% @spec pintersects_file(Name, InputPath, OutputPath) ->
 %%      {ok, InputPath} | {error, Reason}
@@ -201,6 +239,24 @@ intersects_file(Name, InputPath, OutputPath) ->
 pintersects_file(Name, InputPath, OutputPath, From) ->
     ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
     gen_server:cast(ServerName, {pintersects_file, InputPath, OutputPath, From}).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server intersects pool file filter interface
+%%
+%% @spec pfilter_file(Name, InputPath, OutputPath, Filter) ->
+%%      {ok, InputPath} | {error, Reason}
+%%  where
+%%      Name = atom()
+%%      InputPath = string()
+%%      OutputPath = string()
+%%      Filter = fun()
+%% @end
+%%------------------------------------------------------------------------------
+pfilter_file(Name, InputPath, OutputPath, From, Filter) ->
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:cast(ServerName, {pfilter_file, InputPath, OutputPath, From, Filter}).
+
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -294,6 +350,19 @@ handle_call({intersects, X, Y}, _, State) ->
                 %    State#state{error_count=State#state.error_count + 1}}
             end
     end;
+handle_call({filter, X, Y, Filter}, _, State) ->
+    if 
+        State#state.tree == undefined ->
+            {reply, {error, "Tree not populated yet"}, State};
+
+        true ->
+            case rtree:filter(State#state.tree, X, Y, Filter) of
+                {ok, Geoms} -> {reply, {ok, Geoms},
+                    State#state{ok_count=State#state.ok_count + 1}}
+                %{error, Reason} -> {reply, {error, Reason},
+                %    State#state{error_count=State#state.error_count + 1}}
+            end
+    end;
 handle_call({intersects_file, InputPath, OutputPath}, _, State) ->
     if 
         State#state.tree == undefined ->
@@ -338,6 +407,24 @@ handle_cast({pintersects_file, InputPath, OutputPath, From}, #state{tree=Tree}=S
             lager:debug("Call rtree_worker_pool for file: ~p~n", [InputPath]),
             case poolboy:transaction(rtree_worker_pool, fun(Worker) ->
                 gen_server:call(Worker, {intersects_file, Tree, InputPath, OutputPath}) end) of
+                    {ok, InputFile} ->
+                        lager:debug("{ok, ~p} From: ~p~n", [InputFile, From]),
+                        From ! {ok, InputFile},
+                        {noreply, State#state{ok_count=State#state.ok_count + 1}};
+                    {error, Reason} ->
+                        lager:error("{error, ~p, ~p}~n", [InputPath, Reason]),
+                        {noreply, State#state{error_count=State#state.error_count + 1}}
+            end
+    end;
+handle_cast({pfilter_file, InputPath, OutputPath, From, Filter}, #state{tree=Tree}=State) ->
+    if 
+        Tree == undefined ->
+            lager:debug("Tree not populated yet: ~p~n", [Tree]),
+            {noreply, State#state{error_count=State#state.error_count + 1}};
+        true ->
+            lager:debug("Call rtree_worker_pool for file: ~p~n", [InputPath]),
+            case poolboy:transaction(rtree_worker_pool, fun(Worker) ->
+                gen_server:call(Worker, {filter_file, Tree, InputPath, OutputPath, Filter}) end) of
                     {ok, InputFile} ->
                         lager:debug("{ok, ~p} From: ~p~n", [InputFile, From]),
                         From ! {ok, InputFile},

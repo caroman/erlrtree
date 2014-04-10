@@ -114,6 +114,18 @@ command_build_usage() ->
 
 %%------------------------------------------------------------------------------
 %% @doc
+%% Command filter parser specific usage
+%%
+%% @spec command_filter_usage() -> ok
+%% @end
+%%------------------------------------------------------------------------------
+command_filter_usage() ->
+    OptSpecList = command_filter_option_spec_list(),
+    getopt:usage(OptSpecList, "rtree_client filter --").
+
+
+%%------------------------------------------------------------------------------
+%% @doc
 %% Command intersects parser specific usage
 %%
 %% @spec command_intersects_usage() -> ok
@@ -165,7 +177,7 @@ main_option_spec_list() ->
      {timeout,      $t,         "timeout",      {integer, 10},
         "Timeout for response. Default 10 seconds. If is 0 then none is set."},
      {command,     undefined,   undefined,    atom,
-        "Execute command. Options create, insert, load, build, intersects. "}
+        "Execute command. Options create, insert, load, build, intersects, filter. "}
     ].
 
 %%------------------------------------------------------------------------------
@@ -236,6 +248,27 @@ command_build_option_spec_list() ->
      {tree_name,    undefined,  undefined,      atom,
         "Tree name for rtree server (gen_server and ets)."}
     ].
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command intersects specific option specification list
+%%
+%% @spec command_filter_option_spec_list() -> ok
+%% @end
+%%------------------------------------------------------------------------------
+command_filter_option_spec_list() ->
+    [
+     %% {Name, ShortOpt, LongOpt, ArgSpec, HelpMsg}
+     {help,         $h,         "help",         undefined,
+        "Show the program options"},
+     {tree_name,    undefined,  undefined,      atom,
+        "Tree name for rtree server (gen_server and ets)."},
+     {input_file,    undefined,  undefined,      string,
+        "Input file with longitude,latitude values to intersect (.csv.gz)."},
+     {output_file,    undefined,  undefined,      string,
+        "Output file with longitude,latitude values to intersect (.csv.gz)."}
+    ].
+
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -337,6 +370,12 @@ parse_args(RawArgs) ->
                     {SubOptions, SubArgs} = command_parse_args(Args,
                         fun command_build_option_spec_list/0,
                         fun command_build_usage/0),
+                    MergedOptions = lists:append(Options, SubOptions),
+                    {MergedOptions, SubArgs};
+                filter ->
+                    {SubOptions, SubArgs} = command_parse_args(Args,
+                        fun command_filter_option_spec_list/0,
+                        fun command_filter_usage/0),
                     MergedOptions = lists:append(Options, SubOptions),
                     {MergedOptions, SubArgs};
                 intersects ->
@@ -464,6 +503,38 @@ run_command(insert, Options, Args) ->
     ),
     lager:info("Records inserted ~p of ~p",
         [NumberInserted, length(RecordList)]),
+    delayed_halt(0);
+%%------------------------------------------------------------------------------
+%% @doc
+%% Run specific command 
+%%
+%% @spec run_command(filter, Options, Args) -> ok
+%% @end
+%%------------------------------------------------------------------------------
+run_command(filter, Options, Args) ->
+    lager:debug("rtree_client:filter Options:~p Args:~p~n", [Options, Args]),
+    RemoteNode = connect(Options),
+    InputPath = filename:absname(proplists:get_value(input_file, Options)),
+    OutputPath = filename:absname(proplists:get_value(output_file, Options)),
+    TreeName = proplists:get_value(tree_name, Options),
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
+    %% Filter must return true
+    Filter = "fun(E, Point) -> erlgeom:intersects(element(3, E), Point) end.",
+    _Res = case rtree_call(RemoteNode, ServerName, pfilter_file,
+        [TreeName, InputPath, OutputPath, self(), Filter]) of
+        {error, Reason} ->
+            lager:error("~p", [Reason]),
+            delayed_halt(1);
+        Response ->
+            lager:info("~p", [Response]),
+            Response
+    end,
+    receive
+        {ok, InputFile} ->
+            lager:info("Done processing input file: ~p", [InputFile]);
+        Other ->
+            lager:info("Done: ~p", [Other])
+    end,
     delayed_halt(0);
 %%------------------------------------------------------------------------------
 %% @doc

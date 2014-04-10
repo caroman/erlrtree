@@ -107,6 +107,19 @@ handle_call({intersects, Tree, X, Y}, _, State) ->
                 %    State#state{error_count=State#state.error_count + 1}}
             end
     end;
+handle_call({filter, Tree, X, Y, Filter}, _, State) ->
+    if 
+        Tree == undefined ->
+            {reply, {error, "Tree not populated yet"}, State};
+
+        true ->
+            case rtree:filter(Tree, X, Y, Filter) of
+                {ok, Geoms} -> {reply, {ok, Geoms},
+                    State#state{ok_count=State#state.ok_count + 1}}
+                %{error, Reason} -> {reply, {error, Reason},
+                %    State#state{error_count=State#state.error_count + 1}}
+            end
+    end;
 handle_call({intersects_file, Tree, InputPath, OutputPath}, _, State) ->
     if 
         Tree == undefined ->
@@ -115,6 +128,22 @@ handle_call({intersects_file, Tree, InputPath, OutputPath}, _, State) ->
         true ->
             lager:debug("Tree populated, intersecting file: ~p~n", [InputPath]),
             case rtree:intersects_file(Tree, InputPath, OutputPath) of
+                ok ->
+                    {reply, {ok, InputPath},
+                        State#state{ok_count=State#state.ok_count + 1}};
+                {error, Reason} ->
+                    {reply, {error, Reason},
+                        State#state{error_count=State#state.error_count + 1}}
+            end
+    end;
+handle_call({filter_file, Tree, InputPath, OutputPath, Filter}, _, State) ->
+    if 
+        Tree == undefined ->
+            {reply, {error, "Tree not populated yet"}, State};
+
+        true ->
+            lager:debug("Tree populated, intersecting file: ~p~n", [InputPath]),
+            case rtree:filter_file(Tree, InputPath, OutputPath, Filter) of
                 ok ->
                     {reply, {ok, InputPath},
                         State#state{ok_count=State#state.ok_count + 1}};
