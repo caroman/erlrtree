@@ -35,7 +35,7 @@
     intersects/3,
     filter_file/4,
     intersects_file/3,
-    load/2,
+    load/3,
     pfilter_file/5,
     pintersects_file/4,
     start_link/2,
@@ -268,9 +268,9 @@ pfilter_file(Name, InputPath, OutputPath, From, Filter) ->
 %%      Bool = bool()
 %% @end
 %%------------------------------------------------------------------------------
-load(Name, Dsn) ->
+load(Name, Dsn, IdIndex) ->
     ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:call(ServerName, {load, Dsn}, infinity).
+    gen_server:call(ServerName, {load, Dsn, IdIndex}, infinity).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -379,9 +379,9 @@ handle_call({intersects_file, InputPath, OutputPath}, _, State) ->
                         State#state{error_count=State#state.error_count + 1}}
             end
     end;
-handle_call({load, Dsn}, _From, State) ->
+handle_call({load, Dsn, IdIndex}, _From, State) ->
     Table = State#state.table,
-    case rtree:load_to_ets(Dsn, Table) of
+    case rtree:load_to_ets(Dsn, IdIndex, Table) of
         ok -> {reply, {ok, Table}, State#state{table=Table}};
         {error, Reason} -> {reply, {error, Reason}, State}
     end;

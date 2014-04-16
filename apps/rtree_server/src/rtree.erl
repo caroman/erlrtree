@@ -34,8 +34,8 @@
     intersects_file/3,
     filter/4,
     filter_file/4,
-    load_to_ets/2,
-    load_to_list/1
+    load_to_ets/3,
+    load_to_list/2
     ]).
 
 
@@ -50,7 +50,7 @@
 create_ets(Table, _HeirTuple) ->
     case ets:info(Table) of
         undefined -> ets:new(Table, [set, public, named_table,
-            {keypos, 5}, %% first 4 values are header,srid,geos,wkb
+            {keypos, 1}, %% first 5 values are id,srid,geos,wkb,header
             {read_concurrency, true},
             {write_concurrency, true},
             {heir, none}
@@ -79,12 +79,12 @@ insert_to_ets(Table, RecordOrRecords) ->
 %%% ----------------------------------------------------------------------------
 %%% @doc Load File into an rtree ETS named Name to be used by rtree as a 
 %%% container for the geometry objects
-%%% @spec load_to_ets(Dsn::string, Table::atom) ->
+%%% @spec load_to_ets(Dsn::string, IdIndex::integer, Table::atom) ->
 %%%     atom(ok) | {atom(error), Reason:string}
 %%% @end
 %%% ----------------------------------------------------------------------------
-load_to_ets(Dsn, Table) ->
-    case load_to_list(Dsn) of
+load_to_ets(Dsn, IdIndex, Table) ->
+    case load_to_list(Dsn, IdIndex) of
         {ok, Records} ->
            insert_to_ets(Table, Records),
            ok;
@@ -94,21 +94,31 @@ load_to_ets(Dsn, Table) ->
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Load into a list of features
-%%% @spec load_to_list(Dsn) -> [tuple()] | {atom(error), atom()}
+%%% @spec load_to_list(Dsn, IdIndex) -> [tuple()] | {atom(error), atom()}
+%%% where
+%%%     Dsn = string()
+%%%     IdIndex = integer()
 %%% @end
 %%% ----------------------------------------------------------------------------
-load_to_list(Dsn) ->
+load_to_list(Dsn, IdIndex) ->
     case erlogr:open(Dsn) of
         {ok, DataSource} ->
             {ok, Layer} = erlogr:ds_get_layer(DataSource, 0),
             {ok, FeatDefn} = erlogr:l_get_layer_defn(Layer),
-            Header = lists:map(fun(Field) -> list_to_atom(Field) end,
-                tuple_to_list(element(2, erlogr:fd_get_fields_name(FeatDefn)))),
+            Header = list_to_tuple(lists:map(fun(Field) -> list_to_atom(Field) end,
+                tuple_to_list(element(2, erlogr:fd_get_fields_name(FeatDefn))))),
             {ok, Count} = erlogr:l_get_feature_count(Layer),
-            Records = [feature_to_tuple(Header,
-                element(2, erlogr:l_get_next_feature(Layer))) %% {ok, Feature}
-                || _ <- lists:seq(1, Count)],
-            {ok, Records};
+            case is_integer(IdIndex) and (IdIndex > 0) and (tuple_size(Header) >= IdIndex) of
+                false ->
+                    Reason = io_lib:format("IdIndex ~p not valid. Header length is ~p.",
+                        [IdIndex, tuple_size(Header)]),
+                    {error, Reason};
+                true ->
+                    Records = [feature_to_tuple(Header, IdIndex,
+                        element(2, erlogr:l_get_next_feature(Layer))) %% {ok, Feature}
+                        || _ <- lists:seq(1, Count)],
+                    {ok, Records}
+            end;
         undefined ->
             lager:error("Not possible to open datasource: ~p", [Dsn]),
             {error, "Not possible to open datasource"}
@@ -179,13 +189,14 @@ build_tree_from_ets(Table) ->
 %%% @spec feature_to_tuple(WkbReader, Header, Feature) -> record(feature)
 %%% @end
 %%% ----------------------------------------------------------------------------
-feature_to_tuple(Header, Feature) ->
+feature_to_tuple(Header, IdIndex, Feature) ->
     {ok, Geom} = erlogr:f_get_geometry_ref(Feature),
     {ok, Wkb} = erlogr:g_export_to_wkb(Geom),
-    FieldsA = [Header, -1, undefined, Wkb], % header, srid, geom, wkb
     {ok, Fields} = erlogr:f_get_fields(Feature),
-    FieldsB = tuple_to_list(Fields),
-    list_to_tuple(lists:append(FieldsA, FieldsB)).
+    Id = element(IdIndex, Fields),
+    FieldsBase = [Id, Header, -1, undefined, Wkb], % header, srid, geom, wkb
+    FieldsFeature = tuple_to_list(Fields),
+    list_to_tuple(lists:append(FieldsBase, FieldsFeature)).
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Helper to convert Feature from Layer into a Record for the ETS
@@ -233,7 +244,7 @@ tree_filter_points(Tree, Points, Filter) ->
             Size = length(InElements),
             case Size of
                 Size when Size > 0  ->
-                    element(5, lists:last(InElements));
+                    element(1, lists:last(InElements));
                 Size when Size == 0 ->
                     0
             end 
@@ -247,7 +258,7 @@ tree_query_points(Tree, Points) ->
             Size = length(InElements),
             case Size of
                 Size when Size > 0  ->
-                    element(5, lists:last(InElements));
+                    element(1, lists:last(InElements));
                 Size when Size == 0 ->
                     0
             end 

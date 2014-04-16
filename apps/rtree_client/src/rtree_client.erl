@@ -211,7 +211,9 @@ command_insert_option_spec_list() ->
      {tree_name,    undefined,  undefined,      atom,
         "Tree name for rtree server (gen_server and ets)."},
      {dsn,    undefined,  undefined,      string,
-        "Data source name."}
+        "Data source name."},
+     {idindex,    undefined,  undefined,      integer,
+        "Field position (1-based) to be used as unique index."}
     ].
 
 
@@ -230,7 +232,9 @@ command_load_option_spec_list() ->
      {tree_name,    undefined,  undefined,      atom,
         "Tree name for rtree server (gen_server and ets)."},
      {dsn,    undefined,  undefined,      string,
-        "Data source name."}
+            "Data source name."},
+     {idindex,    undefined,  undefined,      integer,
+        "Field position (1-based) to be used as unique index."}
     ].
 
 %%------------------------------------------------------------------------------
@@ -475,11 +479,12 @@ run_command(create, Options, _Args) ->
 run_command(insert, Options, Args) ->
     lager:debug("rtree_client:insert options: ~p, args: ~p", [Options, Args]),
     RemoteNode = connect(Options),
+    IdIndex = proplists:get_value(idindex, Options),
     Dsn = proplists:get_value(dsn, Options),
     TreeName = proplists:get_value(tree_name, Options),
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
     %% TODO:Geometries lazy loading
-    RecordList = case rtree:load_to_list(Dsn) of
+    RecordList = case rtree:load_to_list(Dsn, IdIndex) of
         {ok, Records} ->
             Records; 
         {error, Reason1} ->
@@ -546,10 +551,11 @@ run_command(filter, Options, Args) ->
 run_command(load, Options, Args) ->
     lager:debug("rtree_client:load options: ~p, args: ~p", [Options, Args]),
     RemoteNode = connect(Options),
+    IdIndex = proplists:get_value(idindex, Options),
     Dsn = proplists:get_value(dsn, Options),
     TreeName = proplists:get_value(tree_name, Options),
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
-    case rtree_call(RemoteNode, ServerName, load, [TreeName, Dsn]) of
+    case rtree_call(RemoteNode, ServerName, load, [TreeName, Dsn, IdIndex]) of
         {error, Reason} ->
             lager:error("~p", [Reason]),
             delayed_halt(1);
