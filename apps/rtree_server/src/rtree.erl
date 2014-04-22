@@ -190,8 +190,14 @@ build_tree_from_ets(Table) ->
 %%% @end
 %%% ----------------------------------------------------------------------------
 feature_to_tuple(Header, IdIndex, Feature) ->
-    {ok, Geom} = erlogr:f_get_geometry_ref(Feature),
-    {ok, Wkb} = erlogr:g_export_to_wkb(Geom),
+    Wkb = case erlogr:f_get_geometry_ref(Feature) of
+        {ok, Geom} ->
+            erlogr:f_get_geometry_ref(Feature),
+            {ok, Binary} = erlogr:g_export_to_wkb(Geom), %% {ok, Wkb}
+            Binary; %% TODO: Add exception
+        undefined ->
+            undefined
+    end,
     {ok, Fields} = erlogr:f_get_fields(Feature),
     Id = element(IdIndex, Fields),
     FieldsBase = [Id, Header, -1, undefined, Wkb], % header, srid, geom, wkb
