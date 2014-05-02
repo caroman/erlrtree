@@ -36,6 +36,7 @@
     filter_file/4,
     intersects_file/3,
     load/3,
+    lookup/3,
     pfilter_file/5,
     pintersects_file/4,
     start_link/2,
@@ -274,6 +275,21 @@ load(Name, Dsn, IdIndex) ->
 
 %%------------------------------------------------------------------------------
 %% @doc
+%% Server lookup interface
+%%
+%% @spec lookup(Name, Id) -> [Object] | {error, Reason}
+%%  where
+%%      Name = atom()
+%%      Id = term()
+%% @end
+%%------------------------------------------------------------------------------
+lookup(Name, Id, From) ->
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:cast(ServerName, {lookup, Id, From}).
+
+
+%%------------------------------------------------------------------------------
+%% @doc
 %% Server status interface
 %%
 %% @spec status(Name) -> {ok, State}
@@ -434,6 +450,10 @@ handle_cast({pfilter_file, InputPath, OutputPath, From, Filter}, #state{tree=Tre
                         {noreply, State#state{error_count=State#state.error_count + 1}}
             end
     end;
+handle_cast({lookup, Id, From}, State) ->
+    Table = State#state.table,
+    From ! {self(), rtree:lookup(Table, Id)},
+    {noreply, State};
 handle_cast(stop, State) ->
     lager:debug("Cast: ~p~n", [State]),
     {stop, normal, State};

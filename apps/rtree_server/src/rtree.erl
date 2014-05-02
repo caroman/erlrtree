@@ -35,7 +35,8 @@
     filter/4,
     filter_file/4,
     load_to_ets/3,
-    load_to_list/2
+    load_to_list/2,
+    lookup/2
     ]).
 
 
@@ -125,13 +126,24 @@ load_to_list(Dsn, IdIndex) ->
     end.
 
 %%% ----------------------------------------------------------------------------
+%%% @doc Lookup element in ETS table
+%%% @spec lookup(Tree, Id) -> [tuple()]
+%%% where
+%%%     Tree = atom()
+%%%     Id = term()
+%%% @end
+%%% ----------------------------------------------------------------------------
+lookup(Tree, Id) ->
+    ets:lookup(Tree, Id).
+
+%%% ----------------------------------------------------------------------------
 %%% @doc Create STRtree from rtree ETS
 %%% @spec tree_insert_record(Tree, WkbReader, Record)
 %%%     -> atom(ok) | {atom(error), Reason::string()}
 %%% @end
 %%% ----------------------------------------------------------------------------
 tree_insert_record(Tree, WkbReader, Record) ->
-    case element(3, Record) of
+    case element(4, Record) of
         undefined ->
             GeosGeom = geom_from_record(WkbReader, Record),
             NewRecord = setelement(3, Record, GeosGeom),
@@ -210,7 +222,7 @@ feature_to_tuple(Header, IdIndex, Feature) ->
 %%% @end
 %%% ----------------------------------------------------------------------------
 geom_from_record(WkbReader, Record) ->
-    erlgeom:wkbreader_read(WkbReader, element(4, Record)).
+    erlgeom:wkbreader_read(WkbReader, element(5, Record)).
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Intersects X,Y point with Tree

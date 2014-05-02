@@ -123,6 +123,17 @@ command_filter_usage() ->
     OptSpecList = command_filter_option_spec_list(),
     getopt:usage(OptSpecList, "rtree_client filter --").
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command lookup parser specific usage
+%%
+%% @spec command_lookup_usage() -> ok
+%% @end
+%%------------------------------------------------------------------------------
+command_lookup_usage() ->
+    OptSpecList = command_lookup_option_spec_list(),
+    getopt:usage(OptSpecList, "rtree_client lookup --").
+
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -177,7 +188,7 @@ main_option_spec_list() ->
      {timeout,      $t,         "timeout",      {integer, 10},
         "Timeout for response. Default 10 seconds. If is 0 then none is set."},
      {command,     undefined,   undefined,    atom,
-        "Execute command. Options create, insert, load, build, intersects, filter. "}
+        "Execute command: create, insert, load, build, intersects, filter, lookup. "}
     ].
 
 %%------------------------------------------------------------------------------
@@ -271,6 +282,26 @@ command_filter_option_spec_list() ->
         "Input file with longitude,latitude values to intersect (.csv.gz)."},
      {output_file,    undefined,  undefined,      string,
         "Output file with longitude,latitude values to intersect (.csv.gz)."}
+    ].
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command lookup specific option specification list
+%%
+%% @spec command_lookup_option_spec_list() -> ok
+%% @end
+%%------------------------------------------------------------------------------
+command_lookup_option_spec_list() ->
+    [
+     %% {Name, ShortOpt, LongOpt, ArgSpec, HelpMsg}
+     {help,         $h,         "help",         undefined,
+        "Show the program options"},
+     {tree_name,    undefined,  undefined,      atom,
+        "Tree name for rtree server (gen_server and ets)."},
+     {id,    undefined,  undefined,      string,
+        "Id to lookup."},
+     {id_type,    undefined,  undefined,      atom,
+        "Data type for the id. Options string, float, integer, binary."}
     ].
 
 
@@ -380,6 +411,12 @@ parse_args(RawArgs) ->
                     {SubOptions, SubArgs} = command_parse_args(Args,
                         fun command_filter_option_spec_list/0,
                         fun command_filter_usage/0),
+                    MergedOptions = lists:append(Options, SubOptions),
+                    {MergedOptions, SubArgs};
+                lookup ->
+                    {SubOptions, SubArgs} = command_parse_args(Args,
+                        fun command_lookup_option_spec_list/0,
+                        fun command_lookup_usage/0),
                     MergedOptions = lists:append(Options, SubOptions),
                     {MergedOptions, SubArgs};
                 intersects ->
@@ -537,6 +574,43 @@ run_command(filter, Options, Args) ->
     receive
         {ok, InputFile} ->
             lager:info("Done processing input file: ~p", [InputFile]);
+        Other ->
+            lager:info("Done: ~p", [Other])
+    end,
+    delayed_halt(0);
+%%------------------------------------------------------------------------------
+%% @doc
+%% Run specific command 
+%%
+%% @spec run_command(lookup, Options, Args) -> ok
+%% @end
+%%------------------------------------------------------------------------------
+run_command(lookup, Options, Args) ->
+    lager:debug("rtree_client:lookup Options:~p Args:~p~n", [Options, Args]),
+    RemoteNode = connect(Options),
+    IdString = proplists:get_value(id, Options),
+    IdType = proplists:get_value(id_type, Options),
+    Id = case IdType of
+        string -> IdString;
+        float -> list_to_float(IdString);
+        integer -> list_to_integer(IdString);
+        binary -> list_to_binary(IdString)
+    end,
+    TreeName = proplists:get_value(tree_name, Options),
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
+    %% Filter must return true
+    _Res = case rtree_call(RemoteNode, ServerName, lookup,
+        [TreeName, Id, self()]) of
+        {error, Reason} ->
+            lager:error("~p", [Reason]),
+            delayed_halt(1);
+        Response ->
+            lager:info("~p", [Response]),
+            Response
+    end,
+    receive
+        {Pid, Records} ->
+            lager:info("Done processing from pid ~p: ~p", [Pid, Records]);
         Other ->
             lager:info("Done: ~p", [Other])
     end,
