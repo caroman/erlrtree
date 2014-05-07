@@ -30,10 +30,11 @@
     build/1,
     create/1,
     create/2,
-    insert/2,
+    delete/3,
     filter/4,
-    intersects/3,
     filter_file/4,
+    insert/2,
+    intersects/3,
     intersects_file/3,
     load/3,
     lookup/3,
@@ -65,6 +66,7 @@
     tree=undefined,
     table=undefined,
     wkbreader=undefined,
+    tree_count=0,
     ok_count=0,
     error_count=0}).
 
@@ -102,6 +104,34 @@ start_link(Name, Capacity) ->
             lager:error("RTree server: ~p, starting error: ~p", [Name, Error]),
             Error
     end.
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server tree interface
+%%
+%% @spec build(Name) -> {ok, Tree} | {error, Reason}
+%%  where
+%%      Name = term()
+%% @end
+%%------------------------------------------------------------------------------
+build(Name) ->
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:call(ServerName, {build}).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server delete interface
+%%
+%% @spec delete(Name, Id) -> [Object] | {error, Reason}
+%%  where
+%%      Name = atom()
+%%      Id = term()
+%% @end
+%%------------------------------------------------------------------------------
+delete(Name, Id, From) ->
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:cast(ServerName, {delete, Id, From}).
+
 %%------------------------------------------------------------------------------
 %% @doc
 %%  Create a rtree element with node capacity Capacity
@@ -123,61 +153,6 @@ create(Name) ->
 
 %%------------------------------------------------------------------------------
 %% @doc
-%% Server stop interface
-%%
-%% @spec stop(Name) -> ok
-%%  where
-%%      Name = term()
-%% @end
-%%------------------------------------------------------------------------------
-stop(Name) ->
-    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:cast(ServerName, stop).
-
-%%------------------------------------------------------------------------------
-%% @doc
-%% Server tree interface
-%%
-%% @spec build(Name) -> {ok, Tree} | {error, Reason}
-%%  where
-%%      Name = term()
-%% @end
-%%------------------------------------------------------------------------------
-build(Name) ->
-    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:call(ServerName, {build}).
-
-%%------------------------------------------------------------------------------
-%% @doc
-%% Server insert interface
-%%
-%% @spec insert(Name, Records) -> {ok, Bool} | {error, Reason}
-%%  where
-%%      Name = tab()
-%%      Records = [tuple()]
-%% @end
-%%------------------------------------------------------------------------------
-insert(Name, Records) ->
-    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:call(ServerName, {insert, Records}, infinity).
-
-
-%%------------------------------------------------------------------------------
-%% @doc
-%% Server intersects interface
-%%
-%% @spec intersects(Name, X, Y) -> {ok, bool()} | {error, Reason}
-%%  where
-%%      X = float()
-%%      Y = float()
-%% @end
-%%------------------------------------------------------------------------------
-intersects(Name, X, Y) ->
-    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:call(ServerName, {intersects, X, Y}).
-
-%%------------------------------------------------------------------------------
-%% @doc
 %% Server filter interface
 %%
 %% @spec filter(Name, X, Y, Filter) -> {ok, bool()} | {error, Reason}
@@ -191,22 +166,6 @@ intersects(Name, X, Y) ->
 filter(Name, X, Y, Filter) ->
     ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
     gen_server:call(ServerName, {filter, X, Y, Filter}).
-
-
-%%------------------------------------------------------------------------------
-%% @doc
-%% Server intersects file interface
-%%
-%% @spec intersects_file(Name, InputPath, OutputPath) ->
-%%      {ok, InputPath} | {error, Reason}
-%%  where
-%%      InputPath = string()
-%%      OutputPath = string()
-%% @end
-%%------------------------------------------------------------------------------
-intersects_file(Name, InputPath, OutputPath) ->
-    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:call(ServerName, {intersects_file, InputPath, OutputPath}).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -225,6 +184,76 @@ filter_file(Name, InputPath, OutputPath, Filter) ->
     ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
     gen_server:call(ServerName, {filter_file, InputPath, OutputPath, Filter}).
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server insert interface
+%%
+%% @spec insert(Name, Records) -> {ok, Bool} | {error, Reason}
+%%  where
+%%      Name = tab()
+%%      Records = [tuple()]
+%% @end
+%%------------------------------------------------------------------------------
+insert(Name, Records) ->
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:call(ServerName, {insert, Records}, infinity).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server intersects interface
+%%
+%% @spec intersects(Name, X, Y) -> {ok, bool()} | {error, Reason}
+%%  where
+%%      X = float()
+%%      Y = float()
+%% @end
+%%------------------------------------------------------------------------------
+intersects(Name, X, Y) ->
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:call(ServerName, {intersects, X, Y}).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server intersects file interface
+%%
+%% @spec intersects_file(Name, InputPath, OutputPath) ->
+%%      {ok, InputPath} | {error, Reason}
+%%  where
+%%      InputPath = string()
+%%      OutputPath = string()
+%% @end
+%%------------------------------------------------------------------------------
+intersects_file(Name, InputPath, OutputPath) ->
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:call(ServerName, {intersects_file, InputPath, OutputPath}).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server load interface
+%%
+%% @spec load(Name, Dsn) -> {ok, Bool} | {error, Reason}
+%%  where
+%%      Dsn = string()
+%%      Bool = bool()
+%% @end
+%%------------------------------------------------------------------------------
+load(Name, Dsn, IdIndex) ->
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:call(ServerName, {load, Dsn, IdIndex}, infinity).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server lookup interface
+%%
+%% @spec lookup(Name, Id) -> [Object] | {error, Reason}
+%%  where
+%%      Name = atom()
+%%      Id = term()
+%% @end
+%%------------------------------------------------------------------------------
+lookup(Name, Id, From) ->
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:cast(ServerName, {lookup, Id, From}).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -258,36 +287,6 @@ pfilter_file(Name, InputPath, OutputPath, From, Filter) ->
     ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
     gen_server:cast(ServerName, {pfilter_file, InputPath, OutputPath, From, Filter}).
 
-
-%%------------------------------------------------------------------------------
-%% @doc
-%% Server load interface
-%%
-%% @spec load(Name, Dsn) -> {ok, Bool} | {error, Reason}
-%%  where
-%%      Dsn = string()
-%%      Bool = bool()
-%% @end
-%%------------------------------------------------------------------------------
-load(Name, Dsn, IdIndex) ->
-    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:call(ServerName, {load, Dsn, IdIndex}, infinity).
-
-%%------------------------------------------------------------------------------
-%% @doc
-%% Server lookup interface
-%%
-%% @spec lookup(Name, Id) -> [Object] | {error, Reason}
-%%  where
-%%      Name = atom()
-%%      Id = term()
-%% @end
-%%------------------------------------------------------------------------------
-lookup(Name, Id, From) ->
-    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:cast(ServerName, {lookup, Id, From}).
-
-
 %%------------------------------------------------------------------------------
 %% @doc
 %% Server status interface
@@ -299,6 +298,18 @@ status(Name) ->
     ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
     gen_server:call(ServerName, {status}).
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server stop interface
+%%
+%% @spec stop(Name) -> ok
+%%  where
+%%      Name = term()
+%% @end
+%%------------------------------------------------------------------------------
+stop(Name) ->
+    ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
+    gen_server:cast(ServerName, stop).
 
 %% =============================================================================
 %% EXPORTED FUNCTIONS/GEN_SERVER CALLBACKS
@@ -344,14 +355,17 @@ init([Name, Capacity]) ->
 %%------------------------------------------------------------------------------
 handle_call({build}, _From, State) ->
     case rtree:build_tree_from_ets(State#state.table) of
-        {ok, Tree} -> {reply, ok, State#state{tree=Tree}};
+        {ok, Tree, Size} -> {reply, {ok, Size}, State#state{tree=Tree,
+            tree_count=Size}};
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
 handle_call({insert, Records}, _From, State) ->
     Table = State#state.table,
     case rtree:insert_to_ets(Table, Records) of
-        ok -> {reply, {ok, Table}, State#state{table=Table}};
-        {error, Reason} -> {reply, {error, Reason}, State}
+        {ok, NumberInserted} ->
+            {reply, {ok, NumberInserted}, State#state{table=Table}};
+        {error, Reason} ->
+            {reply, {error, Reason}, State}
     end;
 handle_call({intersects, X, Y}, _, State) ->
     if 
@@ -398,7 +412,8 @@ handle_call({intersects_file, InputPath, OutputPath}, _, State) ->
 handle_call({load, Dsn, IdIndex}, _From, State) ->
     Table = State#state.table,
     case rtree:load_to_ets(Dsn, IdIndex, Table) of
-        ok -> {reply, {ok, Table}, State#state{table=Table}};
+        {ok, NumberInserted} ->
+            {reply, {ok, NumberInserted}, State#state{table=Table}};
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
 handle_call({status}, _From, State) ->
@@ -450,6 +465,10 @@ handle_cast({pfilter_file, InputPath, OutputPath, From, Filter}, #state{tree=Tre
                         {noreply, State#state{error_count=State#state.error_count + 1}}
             end
     end;
+handle_cast({delete, Id, From}, State) ->
+    Table = State#state.table,
+    From ! {self(), rtree:delete(Table, Id)},
+    {noreply, State};
 handle_cast({lookup, Id, From}, State) ->
     Table = State#state.table,
     From ! {self(), rtree:lookup(Table, Id)},

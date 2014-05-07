@@ -28,6 +28,7 @@
     build_tree_from_ets/1,
     build_tree_from_records/1,
     create_ets/2,
+    delete/2,
     geom_from_record/2,
     insert_to_ets/2,
     intersects/3,
@@ -65,17 +66,30 @@ create_ets(Table, _HeirTuple) ->
     end.
 
 %%% ----------------------------------------------------------------------------
-%%% @doc Load record or records an rtree ETS named Name to be used by rtree
-%%%
-%%% @spec insert_to_ets(Table, RecordOrRecords) -> true
-%%%   where
-%%%     Table = tab()
-%%%     RecordOrRecords = tuple() | [tuple()]
+%%% @doc Lookup element in ETS table
+%%% @spec delete(Tree, Id) -> [tuple()]
+%%% where
+%%%     Tree = atom()
+%%%     Id = term()
 %%% @end
 %%% ----------------------------------------------------------------------------
-insert_to_ets(Table, RecordOrRecords) ->
-    ets:insert(Table, RecordOrRecords),
+delete(Tree, Id) ->
+    lager:debug("Deleting {Tree, Id}:  {~p, ~p}", [Tree, Id]),
+    ets:delete(Tree, Id),
     ok.
+
+%%% ----------------------------------------------------------------------------
+%%% @doc Load record or records an rtree ETS named Name to be used by rtree
+%%%
+%%% @spec insert_to_ets(Table, Records) -> true
+%%%   where
+%%%     Table = tab()
+%%%     Records = [tuple()]
+%%% @end
+%%% ----------------------------------------------------------------------------
+insert_to_ets(Table, Records) ->
+    ets:insert(Table, Records),
+    {ok, length(Records)}.
 
 %%% ----------------------------------------------------------------------------
 %%% @doc Load File into an rtree ETS named Name to be used by rtree as a 
@@ -88,7 +102,7 @@ load_to_ets(Dsn, IdIndex, Table) ->
     case load_to_list(Dsn, IdIndex) of
         {ok, Records} ->
            insert_to_ets(Table, Records),
-           ok;
+           {ok, length(Records)};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -182,18 +196,19 @@ build_tree_from_records(Records) ->
 %%% @end
 %%% ----------------------------------------------------------------------------
 build_tree_from_ets(Table) ->
-    case ets:info(Table, size) of
-        Size when Size > 0  ->
-            WkbReader = erlgeom:wkbreader_create(),
-            Tree = erlgeom:geosstrtree_create(),
-            lists:foreach(
-                fun(R) -> tree_insert_record(Tree, WkbReader, R) end,
-                ets:match_object(Table, '$1')),
-            {ok, Tree};
-        Size when Size == 0 ->
-            {error, "Empty table"};
-        _ ->
-            {error, "Bad arg"}
+    WkbReader = erlgeom:wkbreader_create(),
+    Tree = erlgeom:geosstrtree_create(),
+    Size = lists:foldl(
+        fun(R, Acc) -> 
+            tree_insert_record(Tree, WkbReader, R),
+            Acc + 1
+        end,
+        0,
+        ets:match_object(Table, '$1')
+    ),
+    case Size of
+        0 -> {ok, undefined, 0};
+        _ -> {ok, Tree, Size}
     end.
 
 %%% ----------------------------------------------------------------------------

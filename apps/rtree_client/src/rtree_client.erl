@@ -80,29 +80,6 @@ command_create_usage() ->
 
 %%------------------------------------------------------------------------------
 %% @doc
-%% Command insert parser specific usage
-%%
-%% @spec command_insert_usage() -> ok
-%% @end
-%%------------------------------------------------------------------------------
-command_insert_usage() ->
-    OptSpecList = command_insert_option_spec_list(),
-    getopt:usage(OptSpecList, "rtree_client insert --").
-
-
-%%------------------------------------------------------------------------------
-%% @doc
-%% Command load parser specific usage
-%%
-%% @spec command_load_usage() -> ok
-%% @end
-%%------------------------------------------------------------------------------
-command_load_usage() ->
-    OptSpecList = command_load_option_spec_list(),
-    getopt:usage(OptSpecList, "rtree_client load --").
-
-%%------------------------------------------------------------------------------
-%% @doc
 %% Command build parser specific usage
 %%
 %% @spec command_build_usage() -> ok
@@ -114,6 +91,28 @@ command_build_usage() ->
 
 %%------------------------------------------------------------------------------
 %% @doc
+%% Command delete parser specific usage
+%%
+%% @spec command_delete_usage() -> ok
+%% @end
+%%------------------------------------------------------------------------------
+command_delete_usage() ->
+    OptSpecList = command_delete_option_spec_list(),
+    getopt:usage(OptSpecList, "rtree_client delete --").
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command doall parser specific usage
+%%
+%% @spec command_doall_usage() -> ok
+%% @end
+%%------------------------------------------------------------------------------
+command_doall_usage() ->
+    OptSpecList = command_doall_option_spec_list(),
+    getopt:usage(OptSpecList, "rtree_client doall --").
+
+%%------------------------------------------------------------------------------
+%% @doc
 %% Command filter parser specific usage
 %%
 %% @spec command_filter_usage() -> ok
@@ -122,6 +121,39 @@ command_build_usage() ->
 command_filter_usage() ->
     OptSpecList = command_filter_option_spec_list(),
     getopt:usage(OptSpecList, "rtree_client filter --").
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command intersects parser specific usage
+%%
+%% @spec command_intersects_usage() -> ok
+%% @end
+%%------------------------------------------------------------------------------
+command_intersects_usage() ->
+    OptSpecList = command_intersects_option_spec_list(),
+    getopt:usage(OptSpecList, "rtree_client intersects --").
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command insert parser specific usage
+%%
+%% @spec command_insert_usage() -> ok
+%% @end
+%%------------------------------------------------------------------------------
+command_insert_usage() ->
+    OptSpecList = command_insert_option_spec_list(),
+    getopt:usage(OptSpecList, "rtree_client insert --").
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command load parser specific usage
+%%
+%% @spec command_load_usage() -> ok
+%% @end
+%%------------------------------------------------------------------------------
+command_load_usage() ->
+    OptSpecList = command_load_option_spec_list(),
+    getopt:usage(OptSpecList, "rtree_client load --").
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -137,29 +169,6 @@ command_lookup_usage() ->
 
 %%------------------------------------------------------------------------------
 %% @doc
-%% Command intersects parser specific usage
-%%
-%% @spec command_intersects_usage() -> ok
-%% @end
-%%------------------------------------------------------------------------------
-command_intersects_usage() ->
-    OptSpecList = command_intersects_option_spec_list(),
-    getopt:usage(OptSpecList, "rtree_client intersects --").
-
-%%------------------------------------------------------------------------------
-%% @doc
-%% Command doall parser specific usage
-%%
-%% @spec command_doall_usage() -> ok
-%% @end
-%%------------------------------------------------------------------------------
-command_doall_usage() ->
-    OptSpecList = command_doall_option_spec_list(),
-    getopt:usage(OptSpecList, "rtree_client doall --").
-
-
-%%------------------------------------------------------------------------------
-%% @doc
 %% Main option specification list
 %%
 %% @spec main_option_spec_list() -> ok
@@ -171,6 +180,8 @@ main_option_spec_list() ->
     %    "Number of concurrent workers a command may use. Default: ~B",
     %    [Jobs]),
     VerboseHelp = "Verbosity level (debug, info, warning, error). Default: warning",
+    CommandsHelp = "Execute command: create, insert, load, build, intersects,
+        filter, lookup, delete. ",
     [
      %% {Name, ShortOpt, LongOpt, ArgSpec, HelpMsg}
      {help,         $h,         "help",         undefined,
@@ -187,8 +198,7 @@ main_option_spec_list() ->
         "Set cookie. Default rtree_server."},
      {timeout,      $t,         "timeout",      {integer, 10},
         "Timeout for response. Default 10 seconds. If is 0 then none is set."},
-     {command,     undefined,   undefined,    atom,
-        "Execute command: create, insert, load, build, intersects, filter, lookup. "}
+     {command,     undefined,   undefined,    atom, CommandsHelp}
     ].
 
 %%------------------------------------------------------------------------------
@@ -304,6 +314,25 @@ command_lookup_option_spec_list() ->
         "Data type for the id. Options string, float, integer, binary."}
     ].
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command delete specific option specification list
+%%
+%% @spec command_delete_option_spec_list() -> ok
+%% @end
+%%------------------------------------------------------------------------------
+command_delete_option_spec_list() ->
+    [
+     %% {Name, ShortOpt, LongOpt, ArgSpec, HelpMsg}
+     {help,         $h,         "help",         undefined,
+        "Show the program options"},
+     {tree_name,    undefined,  undefined,      atom,
+        "Tree name for rtree server (gen_server and ets)."},
+     {id,    undefined,  undefined,      string,
+        "Id to lookup."},
+     {id_type,    undefined,  undefined,      atom,
+        "Data type for the id. Options string, float, integer, binary."}
+    ].
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -382,10 +411,40 @@ parse_args(RawArgs) ->
             %% SubArgs contains Args, if appending is done then values
             %% will be replicated
             case  proplists:get_value(command, Options) of
+                build ->
+                    {SubOptions, SubArgs} = command_parse_args(Args,
+                        fun command_build_option_spec_list/0,
+                        fun command_build_usage/0),
+                    MergedOptions = lists:append(Options, SubOptions),
+                    {MergedOptions, SubArgs};
                 create ->
                     {SubOptions, SubArgs} = command_parse_args(Args,
                         fun command_create_option_spec_list/0,
                         fun command_create_usage/0),
+                    MergedOptions = lists:append(Options, SubOptions),
+                    {MergedOptions, SubArgs};
+                delete ->
+                    {SubOptions, SubArgs} = command_parse_args(Args,
+                        fun command_delete_option_spec_list/0,
+                        fun command_delete_usage/0),
+                    MergedOptions = lists:append(Options, SubOptions),
+                    {MergedOptions, SubArgs};
+                doall->
+                    {SubOptions, SubArgs} = command_parse_args(Args,
+                        fun command_doall_option_spec_list/0,
+                        fun command_doall_usage/0),
+                    MergedOptions = lists:append(Options, SubOptions),
+                    {MergedOptions, SubArgs};
+                filter ->
+                    {SubOptions, SubArgs} = command_parse_args(Args,
+                        fun command_filter_option_spec_list/0,
+                        fun command_filter_usage/0),
+                    MergedOptions = lists:append(Options, SubOptions),
+                    {MergedOptions, SubArgs};
+                intersects ->
+                    {SubOptions, SubArgs} = command_parse_args(Args,
+                        fun command_intersects_option_spec_list/0,
+                        fun command_intersects_usage/0),
                     MergedOptions = lists:append(Options, SubOptions),
                     {MergedOptions, SubArgs};
                 insert ->
@@ -401,34 +460,10 @@ parse_args(RawArgs) ->
                         fun command_load_usage/0),
                     MergedOptions = lists:append(Options, SubOptions),
                     {MergedOptions, SubArgs};
-                build ->
-                    {SubOptions, SubArgs} = command_parse_args(Args,
-                        fun command_build_option_spec_list/0,
-                        fun command_build_usage/0),
-                    MergedOptions = lists:append(Options, SubOptions),
-                    {MergedOptions, SubArgs};
-                filter ->
-                    {SubOptions, SubArgs} = command_parse_args(Args,
-                        fun command_filter_option_spec_list/0,
-                        fun command_filter_usage/0),
-                    MergedOptions = lists:append(Options, SubOptions),
-                    {MergedOptions, SubArgs};
                 lookup ->
                     {SubOptions, SubArgs} = command_parse_args(Args,
                         fun command_lookup_option_spec_list/0,
                         fun command_lookup_usage/0),
-                    MergedOptions = lists:append(Options, SubOptions),
-                    {MergedOptions, SubArgs};
-                intersects ->
-                    {SubOptions, SubArgs} = command_parse_args(Args,
-                        fun command_intersects_option_spec_list/0,
-                        fun command_intersects_usage/0),
-                    MergedOptions = lists:append(Options, SubOptions),
-                    {MergedOptions, SubArgs};
-                doall->
-                    {SubOptions, SubArgs} = command_parse_args(Args,
-                        fun command_doall_option_spec_list/0,
-                        fun command_doall_usage/0),
                     MergedOptions = lists:append(Options, SubOptions),
                     {MergedOptions, SubArgs};
                 undefined ->
@@ -531,7 +566,7 @@ run_command(insert, Options, Args) ->
     %% TODO:Geometries could be validated before inserting
     NumberInserted = lists:foldl(
         fun(R, Acc) ->
-            case rtree_call(RemoteNode, ServerName, insert, [TreeName, R]) of
+            case rtree_call(RemoteNode, ServerName, insert, [TreeName, [R]]) of
                 {error, Reason2} ->
                     lager:error("~p for record ~p", [Reason2, R]),
                     Acc;
@@ -611,6 +646,43 @@ run_command(lookup, Options, Args) ->
     receive
         {Pid, Records} ->
             lager:info("Done processing from pid ~p: ~p", [Pid, Records]);
+        Other ->
+            lager:info("Done: ~p", [Other])
+    end,
+    delayed_halt(0);
+%%------------------------------------------------------------------------------
+%% @doc
+%% Run specific command 
+%%
+%% @spec run_command(delete, Options, Args) -> ok
+%% @end
+%%------------------------------------------------------------------------------
+run_command(delete, Options, Args) ->
+    lager:debug("rtree_client:delete Options:~p Args:~p~n", [Options, Args]),
+    RemoteNode = connect(Options),
+    IdString = proplists:get_value(id, Options),
+    IdType = proplists:get_value(id_type, Options),
+    Id = case IdType of
+        string -> IdString;
+        float -> list_to_float(IdString);
+        integer -> list_to_integer(IdString);
+        binary -> list_to_binary(IdString)
+    end,
+    TreeName = proplists:get_value(tree_name, Options),
+    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
+    %% Filter must return true
+    _Res = case rtree_call(RemoteNode, ServerName, delete,
+        [TreeName, Id, self()]) of
+        {error, Reason} ->
+            lager:error("~p", [Reason]),
+            delayed_halt(1);
+        Response ->
+            lager:info("~p", [Response]),
+            Response
+    end,
+    receive
+        {Pid, Deleted} ->
+            lager:info("Done processing from pid ~p: ~p", [Pid, Deleted]);
         Other ->
             lager:info("Done: ~p", [Other])
     end,
