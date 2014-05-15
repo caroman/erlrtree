@@ -260,13 +260,20 @@ intersects(Tree, X, Y) ->
 filter(Tree, X, Y, FunStr) ->
     %% Extract fun from fun string
     {ok, Tokens, _} = erl_scan:string(FunStr),
-    {ok, [Form]} = erl_parse:parse_exprs(Tokens),
-    Bindings = erl_eval:add_binding('B', 2, erl_eval:new_bindings()),
-    {value, Fun, _} = erl_eval:expr(Form, Bindings),
-    Point = erlgeom:to_geom({'Point', [X, Y]}),
-    Elements = erlgeom:geosstrtree_query(Tree, Point),
-    InElements = [E || E <- Elements, Fun(E, Point) == true],
-    {ok, InElements}.
+    case erl_parse:parse_exprs(Tokens) of
+        {ok, [Form]} ->
+            {value, Fun, _} = erl_eval:expr(Form, erl_eval:new_bindings()),
+            Point = erlgeom:to_geom({'Point', [X, Y]}),
+            Elements = erlgeom:geosstrtree_query(Tree, Point),
+            InElements = [E || E <- Elements, Fun(E, Point) == true],
+            {ok, InElements};
+        {error, Reason} ->
+            lager:error("Parsing ~p: ~p", [FunStr, Reason]),
+            {error, Reason}
+    end.
+%%{ok, [Form]} = erl_parse:parse_exprs(Tokens),
+%%Bindings = erl_eval:add_binding('B', 2, erl_eval:new_bindings()),
+%%{value, Fun, _} = erl_eval:expr(Form, Bindings),
 
 %% =============================================================================
 %%  File related functions

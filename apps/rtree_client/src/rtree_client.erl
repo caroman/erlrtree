@@ -602,10 +602,19 @@ run_command(filter, Options, Args) ->
     %% Filter = "fun(E, Point) -> erlgeom:intersects(element(3, E), Point) end.",
     {ok, Data} = file:read_file(ScriptPath),
     Filter = binary:bin_to_list(Data),
+    %% Evaluates fun in the client before sending it to the server
+    {ok, Tokens, _} = erl_scan:string(Filter),
+    case erl_parse:parse_exprs(Tokens) of
+        {ok, [Form]} ->
+            {value, _Fun, _} = erl_eval:expr(Form, erl_eval:new_bindings());
+        {error, Reason1} ->
+            lager:error("Parsing ~p: ~p", [ScriptPath, Reason1]),
+            delayed_halt(1)
+    end,
     _Res = case rtree_call(RemoteNode, ServerName, pfilter_file,
         [TreeName, InputPath, OutputPath, self(), Filter]) of
-        {error, Reason} ->
-            lager:error("~p", [Reason]),
+        {error, Reason2} ->
+            lager:error("~p", [Reason2]),
             delayed_halt(1);
         Response ->
             lager:info("~p", [Response]),
