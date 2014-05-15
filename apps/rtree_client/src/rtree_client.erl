@@ -288,6 +288,8 @@ command_filter_option_spec_list() ->
         "Show the program options"},
      {tree_name,    undefined,  undefined,      atom,
         "Tree name for rtree server (gen_server and ets)."},
+     {script_file,    undefined,  undefined,      string,
+        "Erlang file with fun(E, Point) function (.erl)."},
      {input_file,    undefined,  undefined,      string,
         "Input file with longitude,latitude values to intersect (.csv.gz)."},
      {output_file,    undefined,  undefined,      string,
@@ -591,12 +593,15 @@ run_command(insert, Options, Args) ->
 run_command(filter, Options, Args) ->
     lager:debug("rtree_client:filter Options:~p Args:~p~n", [Options, Args]),
     RemoteNode = connect(Options),
+    ScriptPath = filename:absname(proplists:get_value(script_file, Options)),
     InputPath = filename:absname(proplists:get_value(input_file, Options)),
     OutputPath = filename:absname(proplists:get_value(output_file, Options)),
     TreeName = proplists:get_value(tree_name, Options),
     ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
     %% Filter must return true
-    Filter = "fun(E, Point) -> erlgeom:intersects(element(3, E), Point) end.",
+    %% Filter = "fun(E, Point) -> erlgeom:intersects(element(3, E), Point) end.",
+    {ok, Data} = file:read_file(ScriptPath),
+    Filter = binary:bin_to_list(Data),
     _Res = case rtree_call(RemoteNode, ServerName, pfilter_file,
         [TreeName, InputPath, OutputPath, self(), Filter]) of
         {error, Reason} ->
