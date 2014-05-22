@@ -42,6 +42,7 @@
     pintersects_file/4,
     start_link/2,
     status/1,
+    list/0,
     stop/1
     ]).
 
@@ -297,6 +298,33 @@ pfilter_file(Name, InputPath, OutputPath, From, Filter) ->
 status(Name) ->
     ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
     gen_server:call(ServerName, {status}).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Server List rtrees
+%%
+%% @spec list() -> {rtree01, rtree02, ...}
+%% @end
+%%------------------------------------------------------------------------------
+list([]) -> {ok};
+list(nomatch) ->
+    {empty};
+list({match,[["rtree_server_",Tree]]}) ->
+    io:format(" * ~p~n", [Tree]);
+list([Resource | List]) ->
+    %%Tree = string:substr(atom_to_list(Resource), 14),
+    Matching = re:run(atom_to_list(Resource),
+                      "(rtree_server_)(.*$)",
+                      [global,{capture,[1,2],list}]),
+    list(Matching),
+
+    %%atom_to_list(Resource), Use string module
+    list(List).
+
+list() ->
+    io:format("List of Trees: ~n"),
+    Resources = resource_discovery:get_resource_types(),
+    list(Resources).
 
 %%------------------------------------------------------------------------------
 %% @doc
