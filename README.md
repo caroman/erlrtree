@@ -32,7 +32,7 @@ the OGR and GEOS bindings. Each rtree server is a gen_server.
 
     1. rel/rtree_server/bin/rtree_server attach
     2. rtree_server:create(tree01).
-    3. rtree_server:load(tree01, "/home/caroman/Projects/caroman/erlrtree/deps/erlogr/test/polygon.shp").
+    3. rtree_server:load(tree01, "/Users/caroman/src/github/erlrtree/deps/erlogr/test/polygon.shp", 1).
     4. rtree_server:build(tree01).
     5. rtree_server:intersects(tree01, 1.0, -1.0).
 
@@ -42,7 +42,7 @@ the OGR and GEOS bindings. Each rtree server is a gen_server.
     1. erl_call -c rtree_server -n rtree_server@127.0.0.1 -a \
         "rtree_server create [tree01]
     2. erl_call -c rtree_server -n rtree_server@127.0.0.1 -a \
-        "rtree_server load [tree01 '\"/home/caroman/Projects/caroman/erlrtree/deps/erlogr/test/polygon.shp\"']"
+        "rtree_server load [tree01 '\"/Users/caroman/src/github/erlrtree/deps/erlogr/test/polygon.shp\"']"
     3. erl_call -c rtree_server -n rtree_server@127.0.0.1 -a \
         "rtree_server build [tree01]"
     4. erl_call -c rtree_server -n rtree_server@127.0.0.1 -a \

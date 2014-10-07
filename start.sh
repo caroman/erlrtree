@@ -1,6 +1,6 @@
 #!/bin/bash
-DIR=$(dirname $(readlink -f $0))
-rebar compile generate && \
+DIR=$(cd $(dirname $0) && pwd)
+make release && make escriptize && \
     $DIR/rel/rtree_server/bin/rtree_server start && \
     sleep 5 && \
     $DIR/apps/rtree_client/bin/rtree_client create blockid && \

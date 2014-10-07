@@ -190,14 +190,14 @@ main_option_spec_list() ->
      %%{version,      $V,         "version",      undefined,
      %%   "Show version information"},
      {node_name,    $n,         "node_name",    {atom, node_name()},
-        "Set the client node's <name|sname>. Default rtree_client."},
+        "Set the client node's <name|sname>."},
      {remote_node,  $r,         "remote_node",  {atom,
         node_sname("rtree_server")},
-        "Node <sname> to connect to. Default name rtree_server."},
+        "Node <sname> to connect to."},
      {cookie,       $c,         "cookie",       {atom, rtree_server},
-        "Set cookie. Default rtree_server."},
+        "Set cookie."},
      {timeout,      $t,         "timeout",      {integer, 10},
-        "Timeout for response. Default 10 seconds. If is 0 then none is set."},
+        "Timeout for response. If set to 0 then none is set."},
      {command,     undefined,   undefined,    atom, CommandsHelp}
     ].
 
@@ -818,7 +818,8 @@ node_name() ->
 %%------------------------------------------------------------------------------
 node_sname(Name) ->
     Localhost = net_adm:localhost(),
-    list_to_atom(Name ++ "@" ++ Localhost).
+    [Shorthost, _] = string:tokens(Localhost, "."),
+    list_to_atom(Name ++ "@" ++ Shorthost).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -832,8 +833,9 @@ connect(Options) ->
     NodeName = proplists:get_value(node_name, Options),
     Cookie = proplists:get_value(cookie, Options),
     RemoteNode = proplists:get_value(remote_node, Options),
+    %%erlang:set_cookie(node(), Cookie),
     net_kernel:start([NodeName, shortnames]),
-    erlang:set_cookie(NodeName, Cookie),
+    erlang:set_cookie(erlang:node(), Cookie),
     case net_adm:ping(RemoteNode) of
         pong ->
             lager:debug("~s: ~s ~p", [?ESCRIPT, NodeName, pong]),
