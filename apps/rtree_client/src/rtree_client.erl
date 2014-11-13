@@ -189,10 +189,10 @@ main_option_spec_list() ->
      {verbose,      $v,         "verbose",      {atom, warning}, VerboseHelp},
      %%{version,      $V,         "version",      undefined,
      %%   "Show version information"},
-     {node_name,    $n,         "node_name",    {atom, node_name()},
-        "Set the client node's <name|sname>."},
+     {node_name,    $n,         "node_name",    {atom, node_name(?ESCRIPT)},
+        "Set the client node's shortname."},
      {remote_node,  $r,         "remote_node",  {atom,
-        node_sname("rtree_server")},
+        node_name("rtree_server")},
         "Node <sname> to connect to."},
      {cookie,       $c,         "cookie",       {atom, rtree_server},
         "Set cookie."},
@@ -800,25 +800,14 @@ run_command(doall, Options, Args) ->
 
 %%------------------------------------------------------------------------------
 %% @doc
-%% Get the node name from the escript name plus the hostname
-%%
-%% @spec node_name() -> NodeName::atom
-%% @end
-%%------------------------------------------------------------------------------
-node_name() ->
-    Localhost = net_adm:localhost(),
-    list_to_atom(?ESCRIPT ++ "@" ++ Localhost).
-
-%%------------------------------------------------------------------------------
-%% @doc
 %% Get the node sname from plus the hostname
 %%
 %% @spec node_sname(Name) -> NodeName::atom
 %% @end
 %%------------------------------------------------------------------------------
-node_sname(Name) ->
+node_name(Name) ->
     Localhost = net_adm:localhost(),
-    [Shorthost, _] = string:tokens(Localhost, "."),
+    Shorthost = lists:nth(1, string:tokens(Localhost, ".")),
     list_to_atom(Name ++ "@" ++ Shorthost).
 
 %%------------------------------------------------------------------------------

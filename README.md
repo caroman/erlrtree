@@ -9,6 +9,9 @@ the OGR and GEOS bindings. Each rtree server is a gen_server.
 
 ### Dependencies
 
+    * yum install gcc
+    * yum install gdal gdal-devel
+    * yum install geos geos-devel
     * make get-deps
 
 ### Create Release
