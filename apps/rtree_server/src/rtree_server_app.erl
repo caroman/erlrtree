@@ -39,7 +39,8 @@
 
 start(_StartType, _StartArgs) ->
     % ok = ensure_contcat(),
-    resource_discovery:add_local_resource_tuple({rtree_supervisor, node()}),
+    resource_discovery:add_local_resource_tuple({rtree_supervisor,
+                                                 {node(), noname}}),
     resource_discovery:add_target_resource_types([rtree_supervisor]),
     resource_discovery:trade_resources(),
     timer:sleep(?WAIT_FOR_SECONDS),

@@ -535,7 +535,8 @@ run_command(create, Options, _Args) ->
     lager:debug("rtree_client:create options: ~p", [Options]),
     RemoteNode = connect(Options),
     TreeName = proplists:get_value(tree_name, Options),
-    case rtree_call(RemoteNode, rtree_supervisor, create, [TreeName]) of
+    SelectedNode = select_node_with_least_rtree_servers(RemoteNode, TreeName),
+    case rpc:call(SelectedNode, rtree_server, create, [TreeName]) of
         {error, Reason} ->
             lager:error("~p", [Reason]),
             delayed_halt(1);
@@ -841,21 +842,85 @@ connect(Options) ->
 %% @doc
 %% Helerper function to submit rpc call where given resource is found
 %%
+%% @spec get_rtree_servers(RemoteNode)
+%% @end
+%%------------------------------------------------------------------------------
+get_rtree_servers(RemoteNode) ->
+    lager:debug("~p:resource_discovery:get_resources(rtree_server)",
+        [RemoteNode]),
+    rpc:call(RemoteNode, resource_discovery, get_resources, [rtree_server]).
+    
+%%------------------------------------------------------------------------------
+%% @doc
+%% Helerper function to submit rpc call where given resource is found
+%%
+%% @spec get_rtree_supervisors(RemoteNode)
+%% @end
+%%------------------------------------------------------------------------------
+get_rtree_supervisors(RemoteNode) ->
+    lager:debug("~p:resource_discovery:get_resources(rtree_supervisor)",
+        [RemoteNode]),
+    rpc:call(RemoteNode, resource_discovery, get_resources, [rtree_supervisor]).
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Helper function to select node with least number of rtree servers created
+%% without an rtree server named TreeName
+%%
+%% @spec select_node_with_least_rtree_servers(RemoteNode, TreeName)
+%% @end
+%%------------------------------------------------------------------------------
+select_node_with_least_rtree_servers(RemoteNode, TreeName) ->
+    Supervisors = get_rtree_supervisors(RemoteNode),
+    lager:debug("Supervisors: ~p", [Supervisors]),
+    Servers = get_rtree_servers(RemoteNode),
+    lager:debug("Servers: ~p", [Servers]),
+    TreeNameServers = lists:filter(fun({_Node, Name}) -> Name == TreeName end,
+        Servers),
+    lager:debug("TreeNameServers: ~p", [TreeNameServers]),
+    NodeCount = lists:foldl(
+        fun({Node, _Name}, D) -> 
+            dict:update_counter(Node, 1, D) end,
+            dict:new(),
+            lists:append(Supervisors, Servers)),
+    lager:debug("Node counts: ~p", [dict:to_list(NodeCount)]),
+    FilteredNodeCount = dict:filter(
+        fun(Node, _Count) ->
+            lists:keymember(Node, 1, TreeNameServers) == false
+        end,
+        NodeCount),
+    lager:debug("Filtered node counts: ~p", [dict:to_list(FilteredNodeCount)]),
+    case lists:keysort(2, dict:to_list(FilteredNodeCount)) of
+        [{Node, Count} | _NodeList] ->
+            lager:info("Node selected: ~p, rtree_server count: ~p",
+                [Node, Count]),
+            Node;
+        [] ->
+            lager:error("No available nodes to start rtree server: ~p",
+                [TreeName]),
+            delayed_halt(1)
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Helper function to submit rpc call where given resource is found
+%%
 %% @spec rtree_call(RemoteNode, Resource, Function, Args) -> Response
 %% @end
 %%------------------------------------------------------------------------------
 rtree_call(RemoteNode, Resource, Function, Args) ->
-    lager:debug("~p:resource_discovery:get_resource(~p)",
+    lager:debug("~p:resource_discovery:get_resources(~p)",
         [RemoteNode, Resource]),
-    case rpc:call(RemoteNode, resource_discovery, get_resource, [Resource]) of
-        {ok, ServerNode} ->
-            lager:debug("Node found: ~p", [ServerNode]),
-            Res = rpc:call(ServerNode, rtree_server, Function, Args),
-            lager:debug("~p:rtree_server:~p ~p",
-                [ServerNode, Function, Args]),
+    case rpc:call(RemoteNode, resource_discovery, get_resources, [Resource]) of
+	    [ResourceInfo | RL] ->
+            lager:debug("Resource to use: ~p, resources not selected: ~p", [ResourceInfo, RL]),
+            {Node, Name} = ResourceInfo,
+            lager:debug("Node found: ~p", [Node]),
+            Res = rpc:call(Node, rtree_server, Function, Args),
+            lager:debug("~p:rtree_server_~p:~p ~p", [Node, Name, Function, Args]),
             lager:debug("Response: ~p", [Res]),
             Res;
-        {error, not_found} ->
+        [] ->
             lager:error("Resource ~p not found in node ~p",
                [Resource, RemoteNode]),
             {error, "Resource not found in node"}

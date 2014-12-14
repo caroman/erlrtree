@@ -74,6 +74,7 @@
 -define(SERVER, ?MODULE).
 -define(DEFAULT_CAPACITY, 10). % 10 elements per node
 -define(WAIT_FOR_SECONDS, 2500).
+-define(RESOURCE, ?MODULE).
 
 %% =============================================================================
 %% EXPORTED FUNCTIONS
@@ -92,9 +93,9 @@
 %% @end
 %%------------------------------------------------------------------------------
 start_link(Name, Capacity) ->
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(Name)),
-    resource_discovery:add_local_resource_tuple({ServerName, node()}),
-    resource_discovery:add_target_resource_types([ServerName]),
+    ServerName = list_to_atom(atom_to_list(?RESOURCE) ++ "_" ++ atom_to_list(Name)),
+    resource_discovery:add_local_resource_tuple({?RESOURCE, {node(), Name}}),
+    resource_discovery:add_target_resource_types([?RESOURCE]),
     resource_discovery:trade_resources(),
     timer:sleep(?WAIT_FOR_SECONDS),
     case gen_server:start_link({local, ServerName}, ?MODULE, [Name, Capacity], []) of
@@ -309,8 +310,8 @@ status(Name) ->
 list([]) -> {ok};
 list(nomatch) ->
     {empty};
-list({match,[["rtree_server_",Tree]]}) ->
-    io:format(" * ~p~n", [Tree]);
+list({match,[["rtree_server_", Tree]]}) ->
+    lager:debug(" * ~p", [Tree]);
 list([Resource | List]) ->
     %%Tree = string:substr(atom_to_list(Resource), 14),
     Matching = re:run(atom_to_list(Resource),
@@ -322,7 +323,7 @@ list([Resource | List]) ->
     list(List).
 
 list() ->
-    io:format("List of Trees: ~n"),
+    lager:debug("List of Trees:"),
     Resources = resource_discovery:get_resource_types(),
     list(Resources).
 
