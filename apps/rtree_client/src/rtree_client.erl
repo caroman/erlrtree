@@ -21,6 +21,7 @@
 %%%----------------------------------------------------------------
 -module(rtree_client).
 -export([main/1]).
+-include("rtree_server.hrl").
 -mode(compile).
 
 -define(ESCRIPT, filename:basename(escript:script_name())).
@@ -146,6 +147,17 @@ command_insert_usage() ->
 
 %%------------------------------------------------------------------------------
 %% @doc
+%% Command list parser specific usage
+%%
+%% @spec command_list_usage() -> ok
+%% @end
+%%------------------------------------------------------------------------------
+command_list_usage() ->
+    OptSpecList = command_list_option_spec_list(),
+    getopt:usage(OptSpecList, "rtree_client list --").
+
+%%------------------------------------------------------------------------------
+%% @doc
 %% Command load parser specific usage
 %%
 %% @spec command_load_usage() -> ok
@@ -237,6 +249,19 @@ command_insert_option_spec_list() ->
         "Field position (1-based) to be used as unique index."}
     ].
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Command list specific option specification list
+%%
+%% @spec command_list_option_spec_list() -> ok
+%% @end
+%%------------------------------------------------------------------------------
+command_list_option_spec_list() ->
+    [
+     %% {Name, ShortOpt, LongOpt, ArgSpec, HelpMsg}
+     {help,         $h,         "help",         undefined,
+        "Show the program options"}
+    ].
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -456,6 +481,12 @@ parse_args(RawArgs) ->
                     MergedOptions = lists:append(Options, SubOptions),
                     {MergedOptions, SubArgs};
 
+                list ->
+                    {SubOptions, SubArgs} = command_parse_args(Args,
+                        fun command_list_option_spec_list/0,
+                        fun command_list_usage/0),
+                    MergedOptions = lists:append(Options, SubOptions),
+                    {MergedOptions, SubArgs};
                 load ->
                     {SubOptions, SubArgs} = command_parse_args(Args,
                         fun command_load_option_spec_list/0,
@@ -535,7 +566,7 @@ run_command(create, Options, _Args) ->
     lager:debug("rtree_client:create options: ~p", [Options]),
     RemoteNode = connect(Options),
     TreeName = proplists:get_value(tree_name, Options),
-    SelectedNode = select_node_with_least_rtree_servers(RemoteNode, TreeName),
+    SelectedNode = select_best_node(RemoteNode, TreeName),
     case rpc:call(SelectedNode, rtree_server, create, [TreeName]) of
         {error, Reason} ->
             lager:error("~p", [Reason]),
@@ -557,8 +588,7 @@ run_command(insert, Options, Args) ->
     IdIndex = proplists:get_value(idindex, Options),
     Dsn = proplists:get_value(dsn, Options),
     TreeName = proplists:get_value(tree_name, Options),
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
-    %% TODO:Geometries lazy loading
+    %% TODO: Geometries lazy loading
     RecordList = case rtree:load_to_list(Dsn, IdIndex) of
         {ok, Records} ->
             Records; 
@@ -566,15 +596,15 @@ run_command(insert, Options, Args) ->
             lager:error("~p", [Reason1]),
             delayed_halt(1)
     end,
-    %% TODO:Geometries could be validated before inserting
+    %% TODO: Geometries could be validated before inserting
     NumberInserted = lists:foldl(
         fun(R, Acc) ->
-            case rtree_call(RemoteNode, ServerName, insert, [TreeName, [R]]) of
-                {error, Reason2} ->
-                    lager:error("~p for record ~p", [Reason2, R]),
+            case rtree_call(RemoteNode, rtree_server, insert, [TreeName, [R]]) of
+                {error, BadNodes} ->
+                    lager:error("~p for record ~p", [BadNodes, R]),
                     Acc;
-                Response ->
-                    lager:debug("Inserted: ~p", [Response]),
+                {ok, ResultList}->
+                    lager:debug("Inserted: ~p", [ResultList]),
                     Acc + 1
             end
         end,
@@ -598,7 +628,6 @@ run_command(filter, Options, Args) ->
     InputPath = filename:absname(proplists:get_value(input_file, Options)),
     OutputPath = filename:absname(proplists:get_value(output_file, Options)),
     TreeName = proplists:get_value(tree_name, Options),
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
     %% Filter must return true
     %% Filter = "fun(E, Point) -> erlgeom:intersects(element(3, E), Point) end.",
     {ok, Data} = file:read_file(ScriptPath),
@@ -612,7 +641,7 @@ run_command(filter, Options, Args) ->
             lager:error("Parsing ~p: ~p", [ScriptPath, Reason1]),
             delayed_halt(1)
     end,
-    _Res = case rtree_call(RemoteNode, ServerName, pfilter_file,
+    _Res = case rtree_call(RemoteNode, rtree_server, pfilter_file,
         [TreeName, InputPath, OutputPath, self(), Filter]) of
         {error, Reason2} ->
             lager:error("~p", [Reason2]),
@@ -647,9 +676,8 @@ run_command(lookup, Options, Args) ->
         binary -> list_to_binary(IdString)
     end,
     TreeName = proplists:get_value(tree_name, Options),
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
     %% Filter must return true
-    _Res = case rtree_call(RemoteNode, ServerName, lookup,
+    _Res = case rtree_call(RemoteNode, rtree_server, lookup,
         [TreeName, Id, self()]) of
         {error, Reason} ->
             lager:error("~p", [Reason]),
@@ -684,23 +712,30 @@ run_command(delete, Options, Args) ->
         binary -> list_to_binary(IdString)
     end,
     TreeName = proplists:get_value(tree_name, Options),
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
     %% Filter must return true
-    _Res = case rtree_call(RemoteNode, ServerName, delete,
-        [TreeName, Id, self()]) of
-        {error, Reason} ->
-            lager:error("~p", [Reason]),
-            delayed_halt(1);
-        Response ->
-            lager:info("~p", [Response]),
-            Response
-    end,
-    receive
-        {Pid, Deleted} ->
-            lager:info("Done processing from pid ~p: ~p", [Pid, Deleted]);
-        Other ->
-            lager:info("Done: ~p", [Other])
-    end,
+    Nodes = get_rtree_servers(RemoteNode, TreeName, 1),
+    {ReturnList, BadNodes} = rpc:multicall(Nodes,
+                                           rtree_server,
+                                           delete,
+                                           [TreeName, Id]),
+    lists:foreach(fun(Node) ->
+                    lager:error("Bad node: ~p", [Node]) end, BadNodes),
+    lists:foreach(fun(Return) ->
+                    lager:info("Return: ~p", [Return]) end, ReturnList),
+
+    %% TODO: exit 1 if BadNodes
+    delayed_halt(0);
+%%------------------------------------------------------------------------------
+%% @doc
+%% Run specific command 
+%%
+%% @spec run_command(list, Options, Args) -> ok
+%% @end
+%%------------------------------------------------------------------------------
+run_command(list, Options, Args) ->
+    lager:debug("rtree_client:list options: ~p, args: ~p", [Options, Args]),
+    RemoteNode = connect(Options),
+    rtree_list(RemoteNode),
     delayed_halt(0);
 %%------------------------------------------------------------------------------
 %% @doc
@@ -715,15 +750,16 @@ run_command(load, Options, Args) ->
     IdIndex = proplists:get_value(idindex, Options),
     Dsn = proplists:get_value(dsn, Options),
     TreeName = proplists:get_value(tree_name, Options),
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
-    case rtree_call(RemoteNode, ServerName, load, [TreeName, Dsn, IdIndex]) of
-        {error, Reason} ->
-            lager:error("~p", [Reason]),
-            delayed_halt(1);
-        Response ->
-            lager:info("~p", [Response]),
-            delayed_halt(0)
-    end;
+    Nodes = get_rtree_servers(RemoteNode, TreeName, 1),
+    {ReturnList, BadNodes} = rpc:multicall(Nodes,
+                                           rtree_server,
+                                           load,
+                                           [TreeName, Dsn, IdIndex]),
+    lists:foreach(fun(Node) ->
+                    lager:error("Bad node: ~p", [Node]) end, BadNodes),
+    lists:foreach(fun(Return) ->
+                    lager:info("Return: ~p", [Return]) end, ReturnList),
+    delayed_halt(0);
 %%------------------------------------------------------------------------------
 %% @doc
 %% Run specific command 
@@ -735,15 +771,11 @@ run_command(build, Options, Args) ->
     lager:debug("Run build: ~p~p~n", [Options, Args]),
     RemoteNode = connect(Options),
     TreeName = proplists:get_value(tree_name, Options),
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
-    case rtree_call(RemoteNode, ServerName, build, [TreeName]) of
-        {error, Reason} ->
-            lager:error("~p", [Reason]),
-            delayed_halt(1);
-        Response ->
-            lager:info("~p", [Response]),
-            delayed_halt(0)
-    end;
+    Nodes = get_rtree_servers(RemoteNode, TreeName, 1),
+    {ReturnList, BadNodes} = rpc:multicall(Nodes, rtree_server, build, [TreeName]),
+    lists:foreach(fun(Node) -> lager:error("Bad node: ~p", [Node]) end, BadNodes),
+    lists:foreach(fun(Return) -> lager:info("Return: ~p", [Return]) end, ReturnList),
+    delayed_halt(0);
 %%------------------------------------------------------------------------------
 %% @doc
 %% Run specific command 
@@ -757,8 +789,7 @@ run_command(intersects, Options, Args) ->
     InputPath = filename:absname(proplists:get_value(input_file, Options)),
     OutputPath = filename:absname(proplists:get_value(output_file, Options)),
     TreeName = proplists:get_value(tree_name, Options),
-    ServerName = list_to_atom("rtree_server_" ++ atom_to_list(TreeName)),
-    _Res = case rtree_call(RemoteNode, ServerName, pintersects_file,
+    _Res = case rtree_call(RemoteNode, rtree_server, pintersects_file,
         [TreeName, InputPath, OutputPath, self()]) of
         {error, Reason} ->
             lager:error("~p", [Reason]),
@@ -846,10 +877,22 @@ connect(Options) ->
 %% @end
 %%------------------------------------------------------------------------------
 get_rtree_servers(RemoteNode) ->
+    Module = resource_discovery,
+    Function = get_resources,
+    Args = [rtree_server],
     lager:debug("~p:resource_discovery:get_resources(rtree_server)",
         [RemoteNode]),
-    rpc:call(RemoteNode, resource_discovery, get_resources, [rtree_server]).
-    
+    lists:keysort(2, rpc:call(RemoteNode, Module, Function, Args)).
+
+get_rtree_servers(RemoteNode, ServerName) ->
+    lists:filter(fun({_Node, Name}) -> Name == ServerName end,
+        get_rtree_servers(RemoteNode)).
+
+get_rtree_servers(RemoteNode, ServerName, ResourceIndex) ->
+    lists:map(fun({Node, _Name}) -> Node end,
+        lists:ukeysort(ResourceIndex,
+            get_rtree_servers(RemoteNode, ServerName))).
+
 %%------------------------------------------------------------------------------
 %% @doc
 %% Helerper function to submit rpc call where given resource is found
@@ -858,19 +901,22 @@ get_rtree_servers(RemoteNode) ->
 %% @end
 %%------------------------------------------------------------------------------
 get_rtree_supervisors(RemoteNode) ->
+    Module = resource_discovery,
+    Function = get_resources,
+    Args = [rtree_supervisor],
     lager:debug("~p:resource_discovery:get_resources(rtree_supervisor)",
         [RemoteNode]),
-    rpc:call(RemoteNode, resource_discovery, get_resources, [rtree_supervisor]).
+    lists:keysort(2, rpc:call(RemoteNode, Module, Function, Args)).
 
 %%------------------------------------------------------------------------------
 %% @doc
-%% Helper function to select node with least number of rtree servers created
+%% Helper function to select best node with least number of rtree servers created
 %% without an rtree server named TreeName
 %%
-%% @spec select_node_with_least_rtree_servers(RemoteNode, TreeName)
+%% @spec select_best_node(RemoteNode, TreeName)
 %% @end
 %%------------------------------------------------------------------------------
-select_node_with_least_rtree_servers(RemoteNode, TreeName) ->
+select_best_node(RemoteNode, TreeName) ->
     Supervisors = get_rtree_supervisors(RemoteNode),
     lager:debug("Supervisors: ~p", [Supervisors]),
     Servers = get_rtree_servers(RemoteNode),
@@ -904,29 +950,67 @@ select_node_with_least_rtree_servers(RemoteNode, TreeName) ->
 %%------------------------------------------------------------------------------
 %% @doc
 %% Helper function to submit rpc call where given resource is found
+%% if there is a bad node then return error tuple else return ok tuple
 %%
-%% @spec rtree_call(RemoteNode, Resource, Function, Args) -> Response
+%% @spec rtree_call(RemoteNode, Resource, Function, Args) ->
+%%          {ok, ReturnList} | {error, BadNodes}
 %% @end
 %%------------------------------------------------------------------------------
 rtree_call(RemoteNode, Resource, Function, Args) ->
     lager:debug("~p:resource_discovery:get_resources(~p)",
         [RemoteNode, Resource]),
-    case rpc:call(RemoteNode, resource_discovery, get_resources, [Resource]) of
-	    [ResourceInfo | RL] ->
-            lager:debug("Resource to use: ~p, resources not selected: ~p", [ResourceInfo, RL]),
-            {Node, Name} = ResourceInfo,
-            lager:debug("Node found: ~p", [Node]),
-            Res = rpc:call(Node, rtree_server, Function, Args),
-            lager:debug("~p:rtree_server_~p:~p ~p", [Node, Name, Function, Args]),
-            lager:debug("Response: ~p", [Res]),
-            Res;
-        [] ->
-            lager:error("Resource ~p not found in node ~p",
-               [Resource, RemoteNode]),
-            {error, "Resource not found in node"}
+    [TreeName | _] = Args,
+    %% Retrieve nodes for TreeName
+    Nodes = get_rtree_servers(RemoteNode, TreeName, 1),
+    %% Execute call in all nodes with TreeName 
+    {ReturnList, BadNodes} = rpc:multicall(Nodes, Resource, Function, Args),
+    lists:foreach(fun(Node) -> lager:error("Bad node: ~p", [Node]) end,
+                  BadNodes),
+    lists:foreach(fun(Return) -> lager:info("Return: ~p", [Return]) end,
+                  ReturnList),
+    case length(ReturnList) == length(Nodes) of
+        true -> {ok, ReturnList};
+        false -> {error, BadNodes}
     end.
 
-
+%%------------------------------------------------------------------------------
+%% @doc
+%% Helper function to submit rpc call where given resource is found
+%%
+%% @spec rtree_list(RemoteNode) -> ok
+%% @end
+%%------------------------------------------------------------------------------
+rtree_list(RemoteNode) ->
+    %% Retrieve all rtree supervisors and print name\tnode
+    lists:foreach(
+        fun({Node, Name}) ->
+            io:format("Supervisor: ~p\tNode: ~p\n", [Name, Node])
+        end,
+        get_rtree_supervisors(RemoteNode)),
+    %% Retrieve all rtree servers and print name\tnode
+    ServerResourceList = get_rtree_servers(RemoteNode),
+    lists:foreach(
+        fun({Node, Name}) ->
+            io:format("Server: ~p\tNode: ~p\n", [Name, Node])
+        end,
+        ServerResourceList),
+    lists:foreach(
+        fun({Node, Name}) ->
+            case rpc:call(Node, rtree_server, status, [Name], 10) of
+                {badrpc, Reason} ->
+                    io:format("Error in ~p:rtree_server:status(~p): ~p\n",
+                        [Node, Name, Reason]);
+                {ok, Status} ->
+                    io:format("Node:~p\tName:~p\tDirty:~p\tTreeCount:~p\tOKCount:~p\n",
+                        [Node,
+                         Name,
+                         Status#state.dirty,
+                         Status#state.tree_count,
+                         Status#state.ok_count])
+            end
+        end,
+        ServerResourceList),
+    ok.
 
 %%------------------------------------------------------------------------------
 %% @doc

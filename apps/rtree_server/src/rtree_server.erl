@@ -30,7 +30,7 @@
     build/1,
     create/1,
     create/2,
-    delete/3,
+    delete/2,
     filter/4,
     filter_file/4,
     insert/2,
@@ -45,6 +45,8 @@
     list/0,
     stop/1
     ]).
+
+-include("rtree.hrl").
 
 %% =============================================================================
 %% Server call back functions
@@ -61,15 +63,15 @@
 %% =============================================================================
 %%  Server initial state
 %% =============================================================================
--record(state, {
-    name=undefined,
-    capacity=undefined,
-    tree=undefined,
-    table=undefined,
-    wkbreader=undefined,
-    tree_count=0,
-    ok_count=0,
-    error_count=0}).
+%%-record(state, {
+%%    name=undefined,
+%%    capacity=undefined,
+%%    tree=undefined,
+%%    table=undefined,
+%%    wkbreader=undefined,
+%%    tree_count=0,
+%%    ok_count=0,
+%%    error_count=0}).
 
 -define(SERVER, ?MODULE).
 -define(DEFAULT_CAPACITY, 10). % 10 elements per node
@@ -130,9 +132,9 @@ build(Name) ->
 %%      Id = term()
 %% @end
 %%------------------------------------------------------------------------------
-delete(Name, Id, From) ->
+delete(Name, Id) ->
     ServerName = list_to_existing_atom("rtree_server_" ++ atom_to_list(Name)),
-    gen_server:cast(ServerName, {delete, Id, From}).
+    gen_server:call(ServerName, {delete, Id}).
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -385,7 +387,7 @@ init([Name, Capacity]) ->
 handle_call({build}, _From, State) ->
     case rtree:build_tree_from_ets(State#state.table) of
         {ok, Tree, Size} -> {reply, {ok, Size}, State#state{tree=Tree,
-            tree_count=Size}};
+            tree_count=Size, dirty=false}};
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
 handle_call({insert, Records}, _From, State) ->
@@ -442,9 +444,14 @@ handle_call({load, Dsn, IdIndex}, _From, State) ->
     Table = State#state.table,
     case rtree:load_to_ets(Dsn, IdIndex, Table) of
         {ok, NumberInserted} ->
-            {reply, {ok, NumberInserted}, State#state{table=Table}};
+            {reply, {ok, NumberInserted}, State#state{table=Table, dirty=true}};
         {error, Reason} -> {reply, {error, Reason}, State}
     end;
+handle_call({delete, Id}, _From, State) ->
+    Table = State#state.table,
+    lager:debug("Deleting Id: ~p", [Id]),
+    rtree:delete(Table, Id),
+    {reply, {ok, true}, State#state{dirty=true}};
 handle_call({status}, _From, State) ->
     {reply, {ok, State}, State}.
 
@@ -494,10 +501,6 @@ handle_cast({pfilter_file, InputPath, OutputPath, From, Filter}, #state{tree=Tre
                         {noreply, State#state{error_count=State#state.error_count + 1}}
             end
     end;
-handle_cast({delete, Id, From}, State) ->
-    Table = State#state.table,
-    From ! {self(), rtree:delete(Table, Id)},
-    {noreply, State};
 handle_cast({lookup, Id, From}, State) ->
     Table = State#state.table,
     From ! {self(), rtree:lookup(Table, Id)},
