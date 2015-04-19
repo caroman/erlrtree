@@ -193,7 +193,7 @@ main_option_spec_list() ->
     %    [Jobs]),
     VerboseHelp = "Verbosity level (debug, info, warning, error). Default: warning",
     CommandsHelp = "Execute command: create, insert, load, build, intersects,
-        filter, lookup, delete. ",
+        filter, lookup, delete, list. ",
     [
      %% {Name, ShortOpt, LongOpt, ArgSpec, HelpMsg}
      {help,         $h,         "help",         undefined,
@@ -688,7 +688,20 @@ run_command(lookup, Options, Args) ->
     end,
     receive
         {Pid, Records} ->
-            lager:info("Done processing from pid ~p: ~p", [Pid, Records]);
+            lager:info("Done processing from pid: ~p", [Pid]),
+            lists:foreach(
+                fun(R) ->
+                    Fields = element(2, R),
+                    lists:foreach(
+                        fun(X) -> 
+                        io:fwrite("~p:~p,",
+                                  [element(X, Fields),
+                                   element(5+X, R)])
+                        end,
+                        lists:seq(1, tuple_size(Fields))),
+                    io:fwrite("geometry:\"~s\"~n", [bin_to_hex:bin_to_hex(element(5, R))])
+                end,
+                Records);
         Other ->
             lager:info("Done: ~p", [Other])
     end,
